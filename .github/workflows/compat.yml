@@ -19,10 +19,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: client.js syntax
-        run: node --check lib/client.js
-      - name: index.js syntax
-        run: node --check lib/index.js
+      - name: syntax check every module
+        run: |
+          set -e
+          for f in lib/*.js; do node --check "$f"; done
       - name: host module exports a DSH plugin
         run: |
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') { console.error('missing default plugin'); process.exit(1) } })"
@@ -80,18 +80,32 @@ jobs:
           $globalRoot = (& npm root -g).Trim()
           $dshBin = Join-Path $globalRoot '@deepseek-ai\dsh\lib\bin.js'
           if (-not (Test-Path $dshBin)) { throw "dsh bin not found at $dshBin" }
-          $process = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", 'web', '--port', '3131' -WindowStyle Hidden -PassThru
+          $outFile = Join-Path $env:RUNNER_TEMP 'dsh-web-out.log'
+          $errFile = Join-Path $env:RUNNER_TEMP 'dsh-web-err.log'
+          $process = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", 'web', '--port', '3131' -WindowStyle Hidden -PassThru -RedirectStandardOutput $outFile -RedirectStandardError $errFile
           try {
+            # Readiness is a plain 200 on /. The announced URL is also the only
+            # way to obtain the browser auth cookie (the launch token is honored
+            # on GET / and nowhere else) — but a build without auth announces the
+            # bare URL, so the token is opportunistic, never required.
+            $session = $null
             $ready = $false
             for ($i = 0; $i -lt 60; $i++) {
-              Start-Sleep -Seconds 1
               try {
-                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3131/' -UseBasicParsing -TimeoutSec 2
+                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3131/' -UseBasicParsing -TimeoutSec 3 -SessionVariable session
                 if ($response.StatusCode -eq 200) { $ready = $true; break }
               } catch {}
               if ($process.HasExited) { break }
+              Start-Sleep -Seconds 1
             }
-            if (-not $ready) { throw 'dsh web did not become ready' }
+            if (-not $ready) { throw "dsh web did not become ready`nstdout:`n$(Get-Content $outFile -Raw)`nstderr:`n$(Get-Content $errFile -Raw)" }
+
+            $token = [regex]::Match((Get-Content $outFile -Raw), '[?&]token=([^&\s]+)')
+            if ($token.Success) {
+              $null = Invoke-WebRequest -Uri "http://127.0.0.1:3131/?token=$($token.Groups[1].Value)" -UseBasicParsing -TimeoutSec 5 -WebSession $session
+            }
+            $auth = @{}
+            if ($session) { $auth['WebSession'] = $session }
 
             $base = 'http://127.0.0.1:3131/dsh-ballast/api'
             $sessions = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20
@@ -108,6 +122,46 @@ jobs:
             if ((ApiCode GET "${base}?action=sessions" @('-H', 'sec-fetch-site: cross-site')) -ne '403') { throw 'guard regression: cross-site metadata must be 403' }
             if ((ApiCode GET "${base}?action=sessions" @('-H', 'Origin: https://evil.example')) -ne '403') { throw 'guard regression: foreign Origin must be 403' }
             if ((ApiCode GET "${base}?action=sessions" @('-H', 'Host: rebound.example')) -ne '403') { throw 'guard regression: non-loopback Host must be 403' }
+
+            # --- measure happy path (M1-5) ---
+            # ctx.sessions only answers for live sessions, and a bare `dsh web`
+            # boot has none, so every check above is a failure path. Create one
+            # through the harness's own RPC to prove the read side. Unary routes
+            # are POSTed to /api/<dotted.method>, and the envelope method must
+            # match the path — the slash form answers 404.
+            $createBody = '{"type":"client-request","rpcId":"dsh-ballast-boot-check","method":"session.create","payload":{"args":{"request":{}}}}'
+            $created = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:3131/api/session.create' -ContentType 'application/json' -Body $createBody @auth -TimeoutSec 60
+            if (-not $created.result.ok) { throw "session.create failed: $($created | ConvertTo-Json -Compress -Depth 8)" }
+            $sessionId = $created.result.value.sessionId
+            if (-not $sessionId) { throw 'session.create returned no sessionId' }
+
+            $listed = $null
+            for ($i = 0; $i -lt 20; $i++) {
+              $after = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20
+              if ($after.availability -ne 'available') { throw "tokenMeter/sessions never became available: $($after.availability)" }
+              $listed = @($after.sessions | Where-Object { $_.sessionId -eq $sessionId })
+              if ($listed.Count -gt 0) { break }
+              Start-Sleep -Seconds 1
+            }
+            if ($listed.Count -eq 0) { throw "the created live session is not measurable: $sessionId" }
+            if (-not $listed[0].title) { throw 'the session list must carry a display title' }
+            if (-not $listed[0].titleSource) { throw 'the session list must say where the title came from' }
+
+            $measured = Invoke-RestMethod -Uri "${base}?action=measure&sessionId=$sessionId" -TimeoutSec 60
+            if (-not $measured.ok) { throw "measure on a live session failed: $($measured | ConvertTo-Json -Compress -Depth 8)" }
+            if ($measured.sessionId -ne $sessionId) { throw 'measure echoed a different sessionId' }
+            $m = $measured.measurement
+            foreach ($field in @('logRevision', 'baseline', 'surfaceDeltaTokens', 'totalTokens', 'surfaceTokens', 'eventCount', 'nodeCount', 'routePricedCount', 'rows')) {
+              if ($null -eq $m.PSObject.Properties[$field]) { throw "measurement is missing $field" }
+            }
+            if (@($m.rows).Count -ne $m.nodeCount) { throw 'rows length must match nodeCount' }
+            foreach ($row in @($m.rows)) {
+              foreach ($field in @('seq', 'tokens', 'heuristicTokens', 'priceDelta', 'routePriced', 'type', 'time', 'surfaceOp', 'preview')) {
+                if ($null -eq $row.PSObject.Properties[$field]) { throw "row #$($row.seq) is missing $field" }
+              }
+            }
+            if (-not $measured.title) { throw 'measure must carry the display title too' }
+            Write-Host "measured live session $sessionId ($($m.nodeCount) surface nodes)"
             Write-Host 'compat check passed'
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue

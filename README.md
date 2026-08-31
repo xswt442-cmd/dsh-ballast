@@ -9,14 +9,17 @@ DSH 上下文压舱物归因面板。按**消息条目**计量上下文窗口占
 ## 能回答的问题
 
 - 当前窗口里，**哪条消息**占了多少 token（路由定价 + heuristic 影子价并列）？
+- 那条到底是什么：每行带一个按类型抽取的**正文摘要**（用户提问 / 助手回复 / 工具结果，含 `[bash] exit 0`、`→ write`、图片与推理计数）。
+- 哪些行是**路由定价明显偏离 heuristic** 的（`Δ` 列）——偏离最大的就是首选压舱物。
 - 上下文压力从哪来：baseline 是什么、surface delta 多少？
-- 该砍哪几条？（面板按占用降序排列）
+- 该砍哪几条？（面板按占用降序排列，会话按下拉里的**标题**选，不是裸 sessionId）
 
-## 不能回答的问题（M0 边界）
+## 边界
 
 - 不算钱、不报价目表（那是 `dsh-token-ledger-pro` 等 203 个插件的事）
 - 不预测压缩（compaction 触发归 DSH 自身）
 - 猜不到非 live 会话（`ctx.sessions.get` 只返回 live session，404 是预期行为）
+- 摘要只引用可见正文：`reasoning` 块计入数量但不落字；未知 content block 类型计数后跳过（default-deny），新类型只会让那一行摘要变薄，不会让路由 500
 
 ## 接口
 
@@ -32,8 +35,19 @@ GET /dsh-ballast/api?action=measure    逐条归因（&sessionId=...，必需）
 ```
 TokenMeasurement { logRevision, baseline, surfaceDeltaTokens,
                    totalTokens, surfaceTokens, nodes[{seq, tokens, heuristicTokens}] }
-row = { seq, tokens, heuristicTokens, type, time }   // type 来自 session.events[seq].type
+row = { seq, tokens, heuristicTokens, priceDelta, routePriced,
+        type, time, surfaceOp, preview }   // 后四项来自 session.events[seq]
 ```
+
+`measure` 把四种失败分得很清楚，面板据此显示三态而不是一个笼统的错误：
+
+| code | HTTP | 含义 |
+|---|---|---|
+| `unavailable` | 503 | `tokenMeter` / `sessions` 还没注入完成 |
+| `no_live_session` | 404 | 会话不 live（已结束或属于另一个 host） |
+| `measure_failed` | 500 | `measure()` 自己抛了（日志损坏等）——只坏这一个会话 |
+| `session_required` | 400 | `measure` 少了 `sessionId` |
+| `bad_action` | 400 | 不认识这个 `action` |
 
 ## 兼容
 
@@ -41,7 +55,17 @@ row = { seq, tokens, heuristicTokens, type, time }   // type 来自 session.even
 |---|---|
 | DSH | `>=0.1.2-alpha.2`（对 `dsh-v0.1.2-alpha.2` 源码验证） |
 | Node | `>=20` |
-| 共享 Dock | 加入 `window.__CREATEHELPER_DSH_UTILITY_DOCK_V1__`（与 dsh-instance-manager、dsh-treekeeper 共存；骨架期仅加入不自举，需至少一个 Dock 拥有者插件在场） |
+| 共享 Dock | 加入或自建 `window.__CREATEHELPER_DSH_UTILITY_DOCK_V1__`：已存在就加入，没有就自己造一个。**单独安装即可用**，不要求 dsh-instance-manager / dsh-treekeeper 在场 |
+
+## 共享 Dock
+
+`lib/dock.js` 是 createhelper 三个插件共用的 dock 引导的 **canonical 副本**。DSH 在 serve 时
+不跑打包器（`exports["./client"]` 原样读出一个 classic script），所以它不是运行时 import，
+而是被逐行内嵌进 `lib/client.js`；`test/dock-parity.test.js` 断言两边字节一致，改一侧忘改
+另一侧会让测试挂掉。这样 dock 仍然是页面内的约定：没有 npm 包，也没有插件需要前置依赖。
+
+改 dock 行为时：改 `lib/dock.js` → 重新内嵌 → 三仓各 `cp` 一份（DIM / DTK 的适配补丁在
+`testplace/dock-patches/`，同样仓库外）。
 
 ## 开发
 
@@ -49,9 +73,11 @@ row = { seq, tokens, heuristicTokens, type, time }   // type 来自 session.even
 npm test          # node --test
 ```
 
-CI 见 `.github/workflows/compat.yml`：语法检查、插件形态检查、单测、`npm pack --dry-run`、清单一致性、Windows 真 DSH boot-check（含同源守卫回归）。
+CI 见 `.github/workflows/compat.yml`：语法检查、插件形态检查、单测、`npm pack --dry-run`、
+清单一致性，以及 Windows 真 DSH boot-check——同源守卫回归，加上通过 harness 自己的
+`POST /api/session.create` 造一个 live 会话，把 `measure` 的**正路径**和整条返回契约跑一遍。
 
-设计文档：`testplace/dsh-ballast-m0.md`（仓库外）。
+设计文档：`testplace/dsh-ballast-project.md`（仓库外）。
 
 ## License
 

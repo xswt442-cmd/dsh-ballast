@@ -1,6 +1,6 @@
 {
   "name": "dsh-ballast",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DSH 上下文压舱物归因面板：用 host-only 的 ctx.tokenMeter 逐条消息计量窗口占用（不看花了多少钱，看窗口被谁占了），标出最该抛掉的那几条。Per-message context-window attribution for DeepSeek Harness via the host-only token meter.",
   "type": "module",
   "main": "lib/index.js",
