@@ -1,0 +1,66 @@
+{
+  "name": "dsh-ballast",
+  "version": "0.1.0",
+  "description": "DSH 上下文压舱物归因面板：用 host-only 的 ctx.tokenMeter 逐条消息计量窗口占用（不看花了多少钱，看窗口被谁占了），标出最该抛掉的那几条。Per-message context-window attribution for DeepSeek Harness via the host-only token meter.",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "dshhub": {
+    "schemaVersion": 1,
+    "displayName": "ballast",
+    "summary": "窗口占用归因引擎：按消息条目计量上下文窗口占用（surface tokens 路由定价 + heuristic 影子价），标出最占坑的消息。不看花了多少钱，看窗口被谁占了。",
+    "categories": ["dev", "Web UI"],
+    "surfaces": ["host", "web"],
+    "capabilities": {},
+    "compatibility": {
+      "dsh": ">=0.1.2-alpha.2",
+      "node": ">=20"
+    },
+    "permissions": {
+      "network": ["http://127.0.0.1:*"],
+      "os": []
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xswt442-cmd/dsh-ballast.git"
+  },
+  "homepage": "https://github.com/xswt442-cmd/dsh-ballast#readme",
+  "bugs": {
+    "url": "https://github.com/xswt442-cmd/dsh-ballast/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "deepseek",
+    "dsh-plugin",
+    "token-meter",
+    "context-window",
+    "attribution"
+  ],
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

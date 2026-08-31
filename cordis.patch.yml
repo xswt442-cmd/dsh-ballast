@@ -1,0 +1,8 @@
+# dsh-ballast bundle patch: one loader row mounts the host half.
+# The package manifest's `dsh.client` declaration makes client-modules serve
+# lib/client.js as the browser module for this row automatically (the
+# dsh-instance-manager pattern). The host half registers the
+# /dsh-ballast/api JSON route on the webserver.
+- insert:
+    - id: ballast
+      name: dsh-ballast
