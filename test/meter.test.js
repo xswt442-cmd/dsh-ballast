@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { shapeMeasurement, createMeterBridge, resolveSessionTitle, workspaceBasename } from '../lib/meter.js'
+import { shapeMeasurement, createMeterBridge, resolveSessionTitle, summarizeTypes, workspaceBasename } from '../lib/meter.js'
 
 // TokenMeasurement shape per deepseek-harness packages/llm/token-meter/src/types.ts
 const measurement = {
@@ -295,4 +295,66 @@ test('workspaceBasename handles both separators and refuses to label a root', ()
   assert.equal(workspaceBasename('/'), '')
   assert.equal(workspaceBasename('C:\\'), '')
   assert.equal(workspaceBasename(undefined), '')
+})
+
+// ---- derived cache -------------------------------------------------------
+test('a title scan is skipped at an unchanged log revision and redone when it grows', () => {
+  const events = [
+    { type: 'session/title', seq: 0, data: { title: 'qa' } },
+    { type: 'user/message', seq: 1 }
+  ]
+  let indexReads = 0
+  const counted = new Proxy(events, {
+    get(target, prop) {
+      if (typeof prop === 'string' && /^\d+$/.test(prop)) indexReads += 1
+      return target[prop]
+    }
+  })
+  const session = { id: 'session-memo', header: { cwd: '/home/dev/app' }, events: counted }
+
+  assert.deepEqual(resolveSessionTitle(session), { title: 'qa', titleSource: 'title' })
+  const afterFirst = indexReads
+  assert.ok(afterFirst > 0, 'the first call has to walk the log')
+
+  assert.deepEqual(resolveSessionTitle(session), { title: 'qa', titleSource: 'title' })
+  assert.equal(indexReads, afterFirst, 'the same revision must not rescan the log')
+
+  events.push({ type: 'user/message', seq: 2 })
+  resolveSessionTitle(session)
+  assert.ok(indexReads > afterFirst, 'a longer log is a new revision and must rescan')
+})
+
+// ---- per-type aggregate --------------------------------------------------
+test('the aggregate carries the same absence rule as the rows', () => {
+  const out = summarizeTypes([
+    { type: 'tool/result', tokens: 400 },
+    { type: 'tool/result', tokens: 100 },
+    { type: 'user/message', tokens: 100 },
+    { type: null, tokens: null }
+  ])
+  assert.equal(out.total, 600)
+  assert.deepEqual(out.types.map((group) => group.type), ['tool/result', 'user/message', null])
+  assert.equal(out.types[0].count, 2)
+  assert.ok(Math.abs(out.types[0].share - 500 / 600) < 1e-9)
+  // An unpriced row still counts towards how many rows a type holds, but
+  // contributes nothing to its tokens and therefore no share.
+  assert.equal(out.types[2].count, 1)
+  assert.equal(out.types[2].tokens, 0)
+  assert.equal(out.types[2].share, 0)
+})
+
+test('an empty aggregate reports nothing instead of dividing by zero', () => {
+  assert.deepEqual(summarizeTypes([]), { total: 0, types: [] })
+})
+
+test('two derivations over one session do not overwrite each other', () => {
+  // One memo slot per session used to return the cached title where the
+  // tool-name map was expected, which silently loses the `[bash]` prefix.
+  const session = { id: 'session-memo', header: { cwd: '/home/dev/app' }, events: liveSession.events }
+  assert.ok(resolveSessionTitle(session).title)
+  const out = shapeMeasurement(
+    { ...measurement, nodes: [{ seq: 2, tokens: 90, heuristicTokens: 90 }] },
+    session
+  )
+  assert.equal(out.rows[0].preview.text, '[bash] exit 0')
 })
