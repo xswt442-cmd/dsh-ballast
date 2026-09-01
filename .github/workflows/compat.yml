@@ -44,15 +44,29 @@ jobs:
           if ($shared -notmatch [regex]::Escape("VERSION = '$($pkg.version)'")) { Write-Error 'lib/shared.js VERSION does not match package version' }
 
   boot-check:
-    name: boot DSH Web with bundle (Windows)
+    name: boot DSH Web with bundle (Windows, ${{ matrix.dsh-spec }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `latest` is what most installs get (0.1.1-rc.2 today); `alpha` is the
+        # line package.json actually claims. Installing a bare package name
+        # would only ever verify latest and leave the claim untested.
+        dsh-spec: ['@alpha', '@latest']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: install DSH
-        run: npm i -g @deepseek-ai/dsh
+        run: npm i -g "@deepseek-ai/dsh${{ matrix.dsh-spec }}"
+      - name: report the host version under test
+        shell: pwsh
+        run: |
+          $root = (& npm root -g).Trim()
+          $v = node -p "require('$root\\@deepseek-ai\\dsh\\package.json').version"
+          Write-Host "dsh host under test: $v (${{ matrix.dsh-spec }})"
+          if ($v -notmatch '^\d+\.\d+\.\d+') { throw "unreadable dsh version: $v" }
       - name: register bundle into a temporary profile
         shell: pwsh
         env:
@@ -84,33 +98,50 @@ jobs:
           $errFile = Join-Path $env:RUNNER_TEMP 'dsh-web-err.log'
           $process = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", 'web', '--port', '3131' -WindowStyle Hidden -PassThru -RedirectStandardOutput $outFile -RedirectStandardError $errFile
           try {
-            # Readiness is a plain 200 on /. The announced URL is also the only
-            # way to obtain the browser auth cookie (the launch token is honored
-            # on GET / and nowhere else) — but a build without auth announces the
-            # bare URL, so the token is opportunistic, never required.
-            $session = $null
+            # Readiness is "the port answers", not "answers 200". rc builds
+            # serve the shell openly; alpha builds gate it behind a launch token
+            # and answer 401 until it is redeemed, so any returned status proves
+            # the host is up and only the auth step below may demand 200.
             $ready = $false
             for ($i = 0; $i -lt 60; $i++) {
               try {
-                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3131/' -UseBasicParsing -TimeoutSec 3 -SessionVariable session
-                if ($response.StatusCode -eq 200) { $ready = $true; break }
-              } catch {}
+                $null = Invoke-WebRequest -Uri 'http://127.0.0.1:3131/' -UseBasicParsing -TimeoutSec 3
+                $ready = $true; break
+              } catch {
+                if ($_.Exception.Response) { $ready = $true; break }
+              }
               if ($process.HasExited) { break }
               Start-Sleep -Seconds 1
             }
-            if (-not $ready) { throw "dsh web did not become ready`nstdout:`n$(Get-Content $outFile -Raw)`nstderr:`n$(Get-Content $errFile -Raw)" }
+            if (-not $ready) { throw "dsh web did not become ready`nstdout:`n$(Get-Content $outFile -Raw)`nstderr:`n$(Get-Content $errFile -Raw)`n" }
 
-            $token = [regex]::Match((Get-Content $outFile -Raw), '[?&]token=([^&\s]+)')
-            if ($token.Success) {
-              $null = Invoke-WebRequest -Uri "http://127.0.0.1:3131/?token=$($token.Groups[1].Value)" -UseBasicParsing -TimeoutSec 5 -WebSession $session
+            # Auth: redeem the announced launch token on GET / (it is honoured
+            # nowhere else) to get the cookie /api/* needs. A build with no auth
+            # announces the bare URL, so the token is opportunistic, never
+            # required. It can reach the log after the first 401, so retry.
+            $tokenPattern = [regex]'[?&]token=([^&\s]+)'
+            $session = $null
+            $shell = $null
+            $announced = $false
+            for ($i = 0; $i -lt 15 -and -not $shell; $i++) {
+              $log = [string](Get-Content $outFile -Raw -ErrorAction SilentlyContinue)
+              $token = $tokenPattern.Match($log)
+              $announced = $token.Success
+              $url = if ($token.Success) { "http://127.0.0.1:3131/?token=$($token.Groups[1].Value)" } else { 'http://127.0.0.1:3131/' }
+              try {
+                $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5 -SessionVariable session
+                if ($response.StatusCode -eq 200) { $shell = $response }
+              } catch {}
+              if (-not $shell) { Start-Sleep -Seconds 1 }
             }
-            $auth = @{}
-            if ($session) { $auth['WebSession'] = $session }
+            if (-not $shell) { throw "the web shell never answered 200 (launch token announced: $announced)`nstdout:`n$(Get-Content $outFile -Raw)`nstderr:`n$(Get-Content $errFile -Raw)`n" }
+            Write-Host "web shell authenticated (launch token announced: $announced)"
+            $auth = @{ WebSession = $session }
 
             $base = 'http://127.0.0.1:3131/dsh-ballast/api'
             $sessions = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20
             if (-not $sessions.ok) { throw 'sessions returned an unexpected payload' }
-            $client = Invoke-WebRequest -Uri 'http://127.0.0.1:3131/plugins/dsh-ballast/client.js' -UseBasicParsing -TimeoutSec 5
+            $client = Invoke-WebRequest -Uri 'http://127.0.0.1:3131/plugins/dsh-ballast/client.js' -UseBasicParsing -TimeoutSec 5 @auth
             if ($client.StatusCode -ne 200) { throw 'client bundle was not served' }
 
             function ApiCode([string]$method, [string]$url, [string[]]$curlArgs = @()) {
@@ -151,17 +182,30 @@ jobs:
             if (-not $measured.ok) { throw "measure on a live session failed: $($measured | ConvertTo-Json -Compress -Depth 8)" }
             if ($measured.sessionId -ne $sessionId) { throw 'measure echoed a different sessionId' }
             $m = $measured.measurement
-            foreach ($field in @('logRevision', 'baseline', 'surfaceDeltaTokens', 'totalTokens', 'surfaceTokens', 'eventCount', 'nodeCount', 'routePricedCount', 'rows')) {
+            foreach ($field in @('logRevision', 'baseline', 'surfaceDeltaTokens', 'totalTokens', 'surfaceTokens', 'eventCount', 'nodeCount', 'shadowPricing', 'routePricedCount', 'rows')) {
               if ($null -eq $m.PSObject.Properties[$field]) { throw "measurement is missing $field" }
             }
             if (@($m.rows).Count -ne $m.nodeCount) { throw 'rows length must match nodeCount' }
-            foreach ($row in @($m.rows)) {
-              foreach ($field in @('seq', 'tokens', 'heuristicTokens', 'priceDelta', 'routePriced', 'type', 'time', 'surfaceOp', 'preview')) {
-                if ($null -eq $row.PSObject.Properties[$field]) { throw "row #$($row.seq) is missing $field" }
+            if (@($m.rows).Count -eq 0) {
+              # A provider-free CI boot has no surface traffic, so the row
+              # contract below is unreachable here. M1 shipped a fabricated Δ
+              # column behind exactly this silence: say it out loud instead.
+              if ($m.shadowPricing -ne 'unknown') { throw "an empty surface must report shadowPricing unknown, got $($m.shadowPricing)" }
+              Write-Host '::notice::0 surface nodes - per-row shape asserts skipped here; covered by test/http.test.js against a priced surface'
+            } else {
+              foreach ($row in @($m.rows)) {
+                foreach ($field in @('seq', 'tokens', 'heuristicTokens', 'priceDelta', 'routePriced', 'type', 'time', 'surfaceOp', 'preview')) {
+                  if ($null -eq $row.PSObject.Properties[$field]) { throw "row #$($row.seq) is missing $field" }
+                }
+                # Anti-fabrication: a host that does not emit the shadow price
+                # must yield nulls, never a delta that just equals tokens.
+                if ($m.shadowPricing -eq 'absent' -and $null -ne $row.heuristicTokens) { throw "shadowPricing=absent but row #$($row.seq) carries a shadow price" }
+                if ($m.shadowPricing -eq 'available' -and $null -eq $row.heuristicTokens) { throw "shadowPricing=available but row #$($row.seq) has no shadow price" }
+                if ($null -ne $row.priceDelta -and $row.priceDelta -ne ($row.tokens - $row.heuristicTokens)) { throw "row #$($row.seq) priceDelta does not match tokens - heuristicTokens" }
               }
             }
             if (-not $measured.title) { throw 'measure must carry the display title too' }
-            Write-Host "measured live session $sessionId ($($m.nodeCount) surface nodes)"
+            Write-Host "measured live session $sessionId ($($m.nodeCount) surface nodes, shadowPricing=$($m.shadowPricing))"
             Write-Host 'compat check passed'
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue

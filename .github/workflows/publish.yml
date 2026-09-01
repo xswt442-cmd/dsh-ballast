@@ -1,0 +1,86 @@
+name: publish
+
+# Release ritual = one command: bump package.json + lib/shared.js + CHANGELOG,
+# tag vX.Y.Z, push --tags. This workflow verifies the tag, publishes to npm with
+# provenance, and cuts a GitHub release whose notes come straight from the
+# matching CHANGELOG section.
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # npm provenance (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: tag matches package.json version
+        shell: bash
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          tag=${GITHUB_REF_NAME#v}
+          if [ "$pkg" != "$tag" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version ${pkg}"
+            exit 1
+          fi
+
+      - name: sanity checks
+        shell: bash
+        run: |
+          tag=${GITHUB_REF_NAME#v}
+          node --check lib/client.js
+          node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
+          # the self-reported version constant must match the release tag
+          grep -qF "VERSION = '${tag}'" lib/shared.js || {
+            echo "::error::lib/shared.js VERSION does not match tag ${tag}"
+            exit 1
+          }
+          # no dependencies to install; this suite is what caught the fabricated
+          # delta column the compat boot-check structurally cannot reach
+          npm test
+
+      - name: skip when version is already published
+        id: published
+        shell: bash
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          if npm view --json "dsh-ballast@${pkg}" version > /dev/null 2>&1; then
+            echo "already=yes" >> "$GITHUB_OUTPUT"
+            echo "::warning::${pkg} is already on npm — nothing to publish"
+          fi
+
+      # Auth = npm Trusted Publishing (OIDC), bound to this exact repo +
+      # workflow file in the package's npmjs.com settings. No token secret
+      # exists; --provenance carries the OIDC exchange (needs id-token: write).
+      - name: publish to npm
+        if: steps.published.outputs.already != 'yes'
+        run: npm publish --provenance --access public
+
+      - name: GitHub release with CHANGELOG notes
+        if: steps.published.outputs.already != 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          export PKG_VERSION=${GITHUB_REF_NAME#v}
+          notes=$(node -e "
+            const fs=require('fs');
+            const v=process.env.PKG_VERSION;
+            let on=false,out=[];
+            for(const l of fs.readFileSync('CHANGELOG.md','utf8').split('\n')){
+              if(l.startsWith('## ')){ if(on)break; on=l.startsWith('## '+v); continue; }
+              if(on)out.push(l);
+            }
+            console.log(out.join('\n').trim()||'Release '+v);
+          ")
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"
