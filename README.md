@@ -10,8 +10,8 @@ DSH Web 上下文窗口归因插件。它按消息条目展示当前 surface 的
 
 ## 功能
 
-- **逐条归因**：按 token 占用降序排列当前 surface，显示用户消息、助手消息和工具结果。
-- **正文摘要**：工具结果回溯工具名；推理块与图像只计数，不内联原文；正文折叠空白后截断到 220 码点，`preview.chars` 与 `preview.truncated` 给出截断前的长度。
+- **逐条归因**：按 token 占用降序排列当前 surface，显示用户消息、助手消息和工具结果；host 给出可解析时间戳时，`#seq` 悬浮显示该条目的写入时间。
+- **正文摘要**：工具结果回溯工具名；推理块与图像只计数，不内联原文；正文折叠空白后截断到 220 码点，`preview.chars` 与 `preview.truncated` 记录截断前长度，被截断的行在正文悬浮提示里带上它。
 - **路由价差**：行内显示路由定价，两条价不等的行带 `Δ` 徽标（悬浮显示两个价格），总计栏给出发生价差的条数；`Δ` 只可能来自图像被按视觉 token 重新定价。
 - **会话选择**：列出当前 host 的 live 会话；标题取最后一条 `session/title` 事件，缺失时依次回退到工作区目录名和 session ID。
 - **工具坞**：页面级共享工具坞作为入口，默认贴在侧栏旁的左下角，可切到右下或隐藏，选择记在 `localStorage`。
@@ -46,13 +46,13 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 | `baseline.kind` | `none`、`estimated` 或 `usage`（provider usage 锚点）；同对象的 `baseline.tokens` 是锚点值 |
 | `totalTokens` | 当前请求与响应的总上下文压力 |
 
-列表只包含当前 surface。已经被 compaction `replace` 折叠的旧 `append` 不再显示。没有图像或路由未声明图像定价时，`tokens` 与 `heuristicTokens` 相同；因此 `Δ` 不是异常分数，也不代表内容重要性。
+列表只包含当前 surface。已经被 compaction `replace` 折叠的旧 `append` 不再显示。没有图像或路由未声明图像定价时，`tokens` 与 `heuristicTokens` 相同；因此 `Δ` 不是异常分数，也不代表内容重要性。`baseline.kind` 为 `none` 时总计栏只标类型，不给锚点数——没有锚点不等于锚点为 0。正文无法按已知 surface 形态解析时，行内标为 `未识别正文`，与空正文区分开。
 
 ## 安全模型
 
 - 所有动作只读，不写状态、不删除消息、不触发压缩。
 - API 校验 Fetch Metadata、`Origin` 和回环 `Host`，拒绝跨站请求与 DNS rebinding。
-- 本机进程仍在信任边界内：能连接 DSH Web 端口的本机进程可读取会话标题、截断前的正文摘要，以及 `sessions` 回复里的 pid、端口和启动时间。
+- 本机进程仍在信任边界内：能连接 DSH Web 端口的本机进程可读取会话标题、截断后的正文摘要（含其截断前长度），以及 `sessions` 回复里的 pid、端口和启动时间。
 - 服务未注入、会话已结束或单次计量失败时分别返回明确错误，不影响其他会话。
 
 ## 平台与边界
@@ -61,7 +61,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 |---|---|
 | DSH | `>=0.1.2-alpha.2` |
 | Node.js | `>=20` |
-| 旧版 token meter | 基础计量可用；影子价缺失时隐藏 `Δ` 与价差计数，总计栏显示 `无影子价` |
+| 旧版 token meter | 基础计量可用；影子价缺失时隐藏 `Δ` 与价差计数，总计栏按缺失范围显示 `无影子价` 或 `影子价不全` |
 
 - 只计量当前 host 的 live 会话，不读取已结束会话或其他 host 的会话。
 - 不提供预算、费用表、压缩预测或可逆正文导出。

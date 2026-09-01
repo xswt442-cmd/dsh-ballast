@@ -66,10 +66,3 @@ test('the client half is a plugin and mounts its panel through the slot', () => 
   assert.match(CLIENT_SRC, /ctx\.on\('dispose'/)
   assert.match(CLIENT_SRC, /dockItem\?\.dispose\(\)/)
 })
-
-test('the panel renders the M1 columns', () => {
-  for (const field of ['priceDelta', 'routePriced', 'surfaceOp', 'preview']) {
-    assert.ok(CLIENT_SRC.includes(field), `panel does not surface ${field}`)
-  }
-  assert.ok(CLIENT_SRC.includes('s.title'), 'the dropdown should lead with the session title')
-})

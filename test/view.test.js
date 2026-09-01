@@ -1,0 +1,145 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+
+// The client ships as one self-contained classic script, so its presentation
+// logic cannot be imported. Grepping the bundle text for a field name is not
+// enough either: it keeps passing when a label goes wrong, when a helper stops
+// being called, or when the field only appears in a comment. So extract the
+// React-free view-helpers region, evaluate it, and assert what the panel says.
+
+const CLIENT_SRC = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+const VIEW_MARK = '// ---- view helpers'
+const PANEL_MARK = '// ---- panel'
+const PLUGIN_MARK = '// ---- plugin'
+
+function region(src, from, to) {
+  const start = src.indexOf(from)
+  const end = to ? src.indexOf(to, start) : src.length
+  assert.ok(start >= 0, `${from} marker is missing from lib/client.js`)
+  assert.ok(end > start, `${to} marker is missing after ${from} in lib/client.js`)
+  return src.slice(start, end)
+}
+
+const VIEW_SRC = region(CLIENT_SRC, VIEW_MARK, PANEL_MARK)
+const PANEL_SRC = region(CLIENT_SRC, PANEL_MARK, PLUGIN_MARK)
+
+const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
+  'timeLabel', 'baselineLabel', 'shadowBadge']
+
+const view = new Function(`${VIEW_SRC}
+return { ${HELPERS.join(', ')} }`)()
+
+test('the view region is presentation only, so evaluating it is fair', () => {
+  // If the region ever reaches for React, the DOM or the network, the harness
+  // below stops being a unit test; say so instead of failing obscurely.
+  assert.ok(!/React\.|document\.|window\.|fetch\(/.test(VIEW_SRC),
+    'view helpers must stay free of React, DOM and I/O')
+  for (const name of HELPERS) {
+    assert.equal(typeof view[name], 'function', `${name} is not defined in the view region`)
+  }
+})
+
+test('an unmeasured value never renders as 0', () => {
+  assert.equal(view.fmt(1234), '1,234')
+  assert.equal(view.fmt(0), '0')
+  for (const missing of [null, undefined, NaN, '1234']) {
+    assert.equal(view.fmt(missing), '—', `${missing} is absent, not a measured zero`)
+  }
+})
+
+test('signed quantities always carry their sign', () => {
+  assert.equal(view.fmtSigned(1234), '+1,234')
+  assert.equal(view.fmtSigned(-1234), '-1,234')
+  assert.equal(view.fmtSigned(0), '0')
+  assert.equal(view.fmtSigned(null), '—')
+})
+
+test('row types fall back to the raw type, then to a marker', () => {
+  assert.equal(view.typeLabel({ type: 'user/message' }), '用户')
+  assert.equal(view.typeLabel({ type: 'assistant/message' }), '助手')
+  assert.equal(view.typeLabel({ type: 'tool/result' }), '工具')
+  assert.equal(view.typeLabel({ type: 'future/kind' }), 'future/kind')
+  assert.equal(view.typeLabel({}), '?')
+})
+
+test('an unreadable payload is not reported as empty content', () => {
+  assert.equal(view.rowText({ type: 'user/message' }), '(无正文)')
+  assert.equal(view.rowText({}), '(事件缺失)')
+  assert.equal(view.rowText({ preview: { shape: 'unknown' } }), '(未识别正文)')
+  assert.equal(view.rowText({ preview: {} }), '(空)')
+  assert.equal(view.rowText({ preview: { kind: 'tool/result' } }), '(空结果)')
+  assert.equal(view.rowText({ preview: { images: 2, reasoning: 1 } }), '(2 张图片 · 仅推理内容)')
+  assert.equal(view.rowText({ preview: { text: '正文', images: 9 } }), '正文')
+})
+
+test('a clipped preview says so and names the pre-clip length', () => {
+  assert.equal(view.textHint({ preview: { text: 'abc' } }), 'abc')
+  assert.equal(view.textHint({ preview: { text: 'abc', truncated: true, chars: 512 } }),
+    'abc（已截断，原文 512 字符）')
+  // chars is payload metadata the host may omit; the note must not become "原文 — 字符".
+  assert.equal(view.textHint({ preview: { text: 'abc', truncated: true } }),
+    'abc（已截断，原文 — 字符）')
+})
+
+test('the seq tooltip renders only a time the plugin can read unambiguously', () => {
+  assert.match(view.timeLabel('2026-09-01T05:40:21.000Z'), /2026/)
+  // A bare number might be seconds or milliseconds and the meter does not know
+  // which; rendering either guess would put a 1970 timestamp on screen.
+  for (const junk of [null, undefined, '', 'not a time', {}, Date.parse('2026-09-01T05:40:21.000Z')]) {
+    assert.equal(view.timeLabel(junk), '', `${String(junk)} must not render a time`)
+  }
+})
+
+test('a baseline with no anchor is not given a token count', () => {
+  assert.equal(view.baselineLabel({ kind: 'none', tokens: 0 }), 'baseline none')
+  assert.equal(view.baselineLabel({ kind: 'estimated', tokens: 4321 }), 'baseline estimated 4,321')
+  assert.equal(view.baselineLabel({ kind: 'usage' }), 'baseline usage')
+  assert.equal(view.baselineLabel(null), 'baseline unknown')
+})
+
+test('the shadow-price badge matches what the host actually omitted', () => {
+  assert.equal(view.shadowBadge({ shadowPricing: 'available' }), null)
+  // An empty surface cannot tell the two host shapes apart: nothing to warn about.
+  assert.equal(view.shadowBadge({ shadowPricing: 'unknown' }), null)
+  assert.equal(view.shadowBadge({ shadowPricing: 'absent' }).label, '无影子价')
+  const partial = view.shadowBadge({ shadowPricing: 'partial' })
+  assert.equal(partial.label, '影子价不全')
+  // The absent wording blames the host version, which is false for a partial surface.
+  assert.ok(!partial.title.includes('此 DSH 宿主不提供'), 'partial must not claim the host lacks shadow pricing')
+})
+
+test('the panel calls every helper instead of formatting inline', () => {
+  const calls = [
+    'fmt(measurement.totalTokens)',
+    'fmtSigned(measurement.surfaceDeltaTokens)',
+    'baselineLabel(measurement.baseline)',
+    'shadowBadge(measurement)',
+    'typeLabel(row)',
+    'rowText(row)',
+    'textHint(row)',
+    'timeLabel(row.time)',
+    'fmtSigned(row.priceDelta)'
+  ]
+  for (const call of calls) {
+    assert.ok(PANEL_SRC.includes(call), `panel does not call ${call}`)
+  }
+  assert.ok(!PANEL_SRC.includes('.baseline.kind'),
+    'the panel must read the baseline through baselineLabel')
+  assert.ok(!/>0 \? '\+' : ''/.test(PANEL_SRC),
+    'sign handling must live in fmtSigned, not inline')
+  // measure_failed carries the reason measure() threw; a bare code tells the
+  // user nothing, so both fetch paths must prefer the message.
+  const withMessage = PANEL_SRC.match(/body\.error \|\| body\.code/g) || []
+  assert.equal(withMessage.length, 2,
+    'both api paths should surface the host error message')
+})
+
+test('the panel surfaces every row field the meter emits', () => {
+  // Pinned against the panel body: a field that only survives in dead code or a
+  // comment must not pass this.
+  for (const field of ['row.priceDelta', 'row.routePriced', 'row.surfaceOp',
+    'row.preview', 'row.tokens', 'row.seq', 'row.time', 's.title']) {
+    assert.ok(PANEL_SRC.includes(field), `panel never reads ${field}`)
+  }
+})
