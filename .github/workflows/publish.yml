@@ -35,6 +35,7 @@ jobs:
           fi
 
       - name: sanity checks
+        id: sanity
         shell: bash
         run: |
           tag=${GITHUB_REF_NAME#v}
@@ -67,6 +68,7 @@ jobs:
         run: npm publish --provenance --access public
 
       - name: GitHub release with CHANGELOG notes
+        if: always() && steps.sanity.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
