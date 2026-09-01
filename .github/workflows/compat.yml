@@ -64,7 +64,9 @@ jobs:
         shell: pwsh
         run: |
           $root = (& npm root -g).Trim()
-          $v = node -p "require('$root\\@deepseek-ai\\dsh\\package.json').version"
+          $manifest = Join-Path $root '@deepseek-ai\dsh\package.json'
+          if (-not (Test-Path $manifest)) { throw "no dsh manifest at $manifest" }
+          $v = (Get-Content $manifest -Raw | ConvertFrom-Json).version
           Write-Host "dsh host under test: $v (${{ matrix.dsh-spec }})"
           if ($v -notmatch '^\d+\.\d+\.\d+') { throw "unreadable dsh version: $v" }
       - name: register bundle into a temporary profile
