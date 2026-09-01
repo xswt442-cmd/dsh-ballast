@@ -2,6 +2,7 @@
 
 [中文](./README.md) | [English](./README.en.md)
 
+[![npm](https://img.shields.io/npm/v/dsh-ballast)](https://www.npmjs.com/package/dsh-ballast)
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
@@ -18,6 +19,8 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 ## Install
 
 ```powershell
+dsh plugin --profile web add dsh-ballast
+# or install from Git
 dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 ```
 

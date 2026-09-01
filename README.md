@@ -2,6 +2,7 @@
 
 [中文](./README.md) | [English](./README.en.md)
 
+[![npm](https://img.shields.io/npm/v/dsh-ballast)](https://www.npmjs.com/package/dsh-ballast)
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
@@ -18,6 +19,8 @@ DSH Web 上下文窗口归因插件。它按消息条目展示当前 surface 的
 ## 安装
 
 ```powershell
+dsh plugin --profile web add dsh-ballast
+# 或 Git 直装
 dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 ```
 
