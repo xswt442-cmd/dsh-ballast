@@ -59,6 +59,40 @@ test('rows tolerate missing events (seq beyond the log)', () => {
   assert.equal(out.rows[0].time, null)
 })
 
+// dsh <= 0.1.1-rc.2 emits no heuristicTokens at all. Proven on a live host:
+// coercing the missing field to 0 made every one of 922 rows report
+// routePriced with priceDelta === tokens — a column of pure fabrication.
+test('a host without the shadow price reports nulls, never delta === tokens', () => {
+  const out = shapeMeasurement(
+    { ...measurement, nodes: [{ seq: 0, tokens: 12 }, { seq: 3, tokens: 400 }] },
+    session
+  )
+  assert.deepEqual(out.rows.map((r) => r.heuristicTokens), [null, null])
+  assert.deepEqual(out.rows.map((r) => r.priceDelta), [null, null])
+  assert.deepEqual(out.rows.map((r) => r.routePriced), [null, null])
+  assert.equal(out.routePricedCount, 0)
+  assert.equal(out.shadowPricing, 'absent')
+})
+
+test('a mix of priced and unpriced nodes is partial, not available', () => {
+  const out = shapeMeasurement(
+    { ...measurement, nodes: [{ seq: 0, tokens: 12, heuristicTokens: 12 }, { seq: 3, tokens: 400 }] },
+    session
+  )
+  assert.equal(out.shadowPricing, 'partial')
+  assert.equal(out.routePricedCount, 0)
+})
+
+test('an empty surface cannot tell the two hosts apart', () => {
+  const out = shapeMeasurement({ ...measurement, nodes: [] }, session)
+  assert.equal(out.shadowPricing, 'unknown')
+  assert.equal(out.nodeCount, 0)
+})
+
+test('a host that prices every node is marked available', () => {
+  assert.equal(shapeMeasurement(measurement, session).shadowPricing, 'available')
+})
+
 // ---- injection fence ---------------------------------------------------
 // A plain mock cannot catch this class of bug, and an *inaccurate* mock is
 // worse than none: cordis runs `inject(names, cb)` as
