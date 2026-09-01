@@ -11,10 +11,10 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 ## Features
 
 - **Per-entry attribution**: sorts the current surface by token occupancy and displays user messages, assistant messages, and tool results.
-- **Content previews**: resolves tool names for results, counts reasoning and images without inlining them, and reports the original length of truncated text.
-- **Route-price difference**: shows route pricing beside a heuristic shadow price; `Δ` only describes images repriced as visual tokens.
-- **Session selection**: lists live sessions on the current host, with titles falling back to the workspace basename and then the session ID.
-- **Utility Dock**: Use the dock in the bottom-left corner of the Session settings as the entry point.
+- **Content previews**: resolves tool names for results, counts reasoning and images without inlining them, and truncates text at 220 code points after whitespace collapsing, reporting the pre-truncation length in `preview.chars` and `preview.truncated`.
+- **Route-price difference**: rows show the route price, and rows whose two prices differ carry a `Δ` badge whose tooltip holds both; the totals bar counts the repriced rows. `Δ` can only come from images repriced as visual tokens.
+- **Session selection**: lists live sessions on the current host; a title is the latest `session/title` event, falling back to the workspace basename and then the session ID.
+- **Utility Dock**: the entry point is the shared page-level dock, placed next to the sidebar at the bottom-left by default, switchable to bottom-right or hidden, with the choice stored in `localStorage`.
 
 ## Install
 
@@ -32,7 +32,7 @@ Per-entry route pricing exists only on the host. The plugin binds services insid
 
 | Action | Method | Description |
 |---|---|---|
-| `sessions` | GET | Returns measurable live sessions, titles, and service availability; the default action |
+| `sessions` | GET | Returns the live sessions on this host (`sessionId`, `eventCount`, title and title source) plus service availability; the default action |
 | `measure&sessionId=` | GET | Calls `tokenMeter.measure()` and returns per-entry measurement for one session |
 
 Main fields:
@@ -40,10 +40,10 @@ Main fields:
 | Field | Meaning |
 |---|---|
 | `tokens` | Token price of the entry under the current routed model |
-| `heuristicTokens` | Fixed-density heuristic shadow price |
-| `priceDelta` | `tokens - heuristicTokens`; non-zero means an image was repriced as visual tokens |
+| `heuristicTokens` | Fixed-density heuristic shadow price; `null` on older hosts |
+| `priceDelta` | `tokens - heuristicTokens`, or `null` without a shadow price; non-zero implies an image was repriced, not the reverse (a repriced row can still cost the same) |
 | `surfaceTokens` | Sum of `tokens` across the current surface |
-| `baseline` | `none`, `estimated`, or a provider usage anchor |
+| `baseline.kind` | `none`, `estimated`, or `usage` (a provider usage anchor); `baseline.tokens` is the anchor value |
 | `totalTokens` | Total current request-and-response context pressure |
 
 The list contains the current surface only. An old `append` folded away by a compaction `replace` is no longer shown. Without images, or when the route declares no image pricing, `tokens` equals `heuristicTokens`. `Δ` is therefore neither an anomaly score nor a measure of content importance.
@@ -52,7 +52,7 @@ The list contains the current surface only. An old `append` folded away by a com
 
 - Every action is read-only: no state writes, message deletion, or compaction.
 - The API validates Fetch Metadata, `Origin`, and loopback `Host`, rejecting cross-site requests and DNS rebinding.
-- Local processes remain inside the trust boundary: a process that can reach the DSH Web port can read session titles and truncated content previews.
+- Local processes remain inside the trust boundary: a process that can reach the DSH Web port can read session titles, the content previews behind truncation, and the pid, port, and start time in the `sessions` reply.
 - Unavailable services, ended sessions, and per-session measurement failures return distinct errors without affecting other sessions.
 
 ## Platform and limits
@@ -61,7 +61,7 @@ The list contains the current surface only. An old `append` folded away by a com
 |---|---|
 | DSH | `>=0.1.2-alpha.2` |
 | Node.js | `>=20` |
-| Older token meter | Basic measurement remains available; the shadow price and `Δ` are hidden when `heuristicTokens` is absent |
+| Older token meter | Basic measurement remains available; when the shadow price is absent, `Δ` and the spread count are hidden and the totals bar shows `无影子价` |
 
 - Measures live sessions on the current host only.
 - No budgets, price tables, compaction prediction, or lossless content export.
