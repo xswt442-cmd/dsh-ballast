@@ -1,9 +1,9 @@
 name: publish
 
-# Release ritual = one command: bump package.json + lib/shared.js + CHANGELOG,
-# tag vX.Y.Z, push --tags. This workflow verifies the tag, publishes to npm with
-# provenance, and cuts a GitHub release whose notes come straight from the
-# matching CHANGELOG section.
+# Release ritual = one command: bump package.json + lib/shared.js, tag with
+# `git tag -a vX.Y.Z -m '<notes>'`, push --tags. This workflow verifies the tag,
+# publishes to npm with provenance, and cuts a GitHub release whose notes are
+# the tag message. Annotated tags only - a lightweight tag carries no notes.
 
 on:
   push:
@@ -17,7 +17,11 @@ jobs:
       contents: write # create the GitHub release
       id-token: write # npm provenance (OIDC)
     steps:
+      # Full history so the annotated tag object is present locally: the release
+      # step below reads its message with `git for-each-ref`.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -67,23 +71,20 @@ jobs:
         if: steps.published.outputs.already != 'yes'
         run: npm publish --provenance --access public
 
-      - name: GitHub release with CHANGELOG notes
+      - name: GitHub release with tag-message notes
         if: always() && steps.sanity.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          export PKG_VERSION=${GITHUB_REF_NAME#v}
-          notes=$(node -e "
-            const fs=require('fs');
-            const v=process.env.PKG_VERSION;
-            let on=false,out=[];
-            for(const l of fs.readFileSync('CHANGELOG.md','utf8').split('\n')){
-              if(l.startsWith('## ')){ if(on)break; on=l.startsWith('## '+v); continue; }
-              if(on)out.push(l);
-            }
-            console.log(out.join('\n').trim()||'Release '+v);
-          ")
+          # The tag carries its own notes, so nothing has to be kept in sync inside
+          # the tree and the ritual stays one `git tag -a`. A lightweight tag has
+          # no message of its own, so this reads the tagged commit's instead.
+          notes=$(git for-each-ref --format='%(contents)' "refs/tags/${GITHUB_REF_NAME}")
+          if [ -z "${notes//[[:space:]]/}" ]; then
+            notes="Release ${GITHUB_REF_NAME}"
+            echo "::warning::no usable tag message - cut annotated tags for real notes"
+          fi
           # Not gated on the publish step: a version published out of band - like
           # the first one, before npm knows this package name at all - still needs
           # its notes here. Re-running once npm auth exists must converge rather
