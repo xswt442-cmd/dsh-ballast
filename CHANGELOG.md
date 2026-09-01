@@ -80,6 +80,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
   token redemption is a separate bounded retry that tolerates the token reaching
   the log after the first 401. rc builds, which announce no token, keep working
   through the same code path.
+- **The alpha leg asked for the client bundle at an address the host does not
+  serve.** rc publishes `/plugins/<id>/client.js`; alpha concatenates every
+  plugin into one combo URL carrying a `rev`, and its handler answers by exact
+  `pathname + search`, so anything not advertised — including the same path with
+  a different `rev` — is a 404. The check now reads the URL out of the shell HTML
+  the host just injected, which is the only component that knows how it addresses
+  its own bundles, and asserts the bytes it gets back are the ballast client.
+- **The alpha leg created its probe session at the wrong endpoint.** rc claims
+  `POST /api/session.create`; alpha claims `POST /api/session/create` and answers
+  the dotted form with a 404. Neither shape is derivable from the version the
+  manifest claims, so the check probes both and reports which one the running
+  host spoke. A future third shape fails the probe loudly instead of skipping
+  the read side.
 
 ### Changed
 

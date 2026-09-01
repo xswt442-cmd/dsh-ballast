@@ -143,8 +143,20 @@ jobs:
             $base = 'http://127.0.0.1:3131/dsh-ballast/api'
             $sessions = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20
             if (-not $sessions.ok) { throw 'sessions returned an unexpected payload' }
-            $client = Invoke-WebRequest -Uri 'http://127.0.0.1:3131/plugins/dsh-ballast/client.js' -UseBasicParsing -TimeoutSec 5 @auth
-            if ($client.StatusCode -ne 200) { throw 'client bundle was not served' }
+
+            # The client artifact's address is not stable across the two lines:
+            # rc serves /plugins/<id>/client.js, while alpha concatenates every
+            # plugin into one combo URL whose handler 404s anything it did not
+            # advertise (rev included). So the URL is read from the shell HTML the
+            # host just injected rather than constructed here.
+            $advertised = [regex]::Match($shell.Content, '["''](/?plugins/[^"'']*dsh-ballast/client\.js[^"'']*)["'']')
+            if (-not $advertised.Success) { throw 'the shell HTML does not advertise the dsh-ballast client bundle' }
+            $bundlePath = [System.Net.WebUtility]::HtmlDecode($advertised.Groups[1].Value)
+            if (-not $bundlePath.StartsWith('/')) { $bundlePath = "/$bundlePath" }
+            $client = Invoke-WebRequest -Uri "http://127.0.0.1:3131$bundlePath" -UseBasicParsing -TimeoutSec 20 @auth
+            if ($client.StatusCode -ne 200) { throw "advertised bundle URL answered $($client.StatusCode)" }
+            if ($client.Content -notmatch [regex]::Escape("id: 'dsh-ballast'")) { throw 'the served bundle is not the dsh-ballast client' }
+            Write-Host "client bundle advertised and served ($($client.Content.Length) bytes)"
 
             function ApiCode([string]$method, [string]$url, [string[]]$curlArgs = @()) {
               & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @curlArgs $url
@@ -159,14 +171,30 @@ jobs:
             # --- measure happy path (M1-5) ---
             # ctx.sessions only answers for live sessions, and a bare `dsh web`
             # boot has none, so every check above is a failure path. Create one
-            # through the harness's own RPC to prove the read side. Unary routes
-            # are POSTed to /api/<dotted.method>, and the envelope method must
-            # match the path — the slash form answers 404.
-            $createBody = '{"type":"client-request","rpcId":"dsh-ballast-boot-check","method":"session.create","payload":{"args":{"request":{}}}}'
-            $created = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:3131/api/session.create' -ContentType 'application/json' -Body $createBody @auth -TimeoutSec 60
-            if (-not $created.result.ok) { throw "session.create failed: $($created | ConvertTo-Json -Compress -Depth 8)" }
-            $sessionId = $created.result.value.sessionId
-            if (-not $sessionId) { throw 'session.create returned no sessionId' }
+            # through the harness's own RPC to prove the read side. The two lines
+            # address it differently and neither answers the other's form: rc
+            # claims the dotted endpoint /api/session.create, alpha the slashed
+            # /api/session/create (endpoint segments may contain "/" since
+            # packages/client/connection/src/client/rpc.ts). Probe both rather
+            # than pinning a leg to a version marker that only npm guessed at.
+            $created = $null
+            $refused = $null
+            foreach ($endpoint in @('session.create', 'session/create')) {
+              $createBody = "{`"type`":`"client-request`",`"rpcId`":`"dsh-ballast-boot-check`",`"method`":`"$endpoint`",`"payload`":{`"args`":{`"request`":{}}}}"
+              $response = $null
+              try {
+                $response = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:3131/api/$endpoint" -ContentType 'application/json' -Body $createBody @auth -TimeoutSec 60
+              } catch { continue }
+              if ($response.result.ok) {
+                $created = [pscustomobject]@{ endpoint = $endpoint; sessionId = $response.result.value.sessionId }
+                break
+              }
+              $refused = $response | ConvertTo-Json -Compress -Depth 8
+            }
+            if (-not $created) { throw "neither session-create endpoint answered: $refused" }
+            $sessionId = $created.sessionId
+            if (-not $sessionId) { throw "session create via /api/$($created.endpoint) returned no sessionId" }
+            Write-Host "created a live session via /api/$($created.endpoint)"
 
             $listed = $null
             for ($i = 0; $i -lt 20; $i++) {

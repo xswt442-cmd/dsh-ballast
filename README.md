@@ -67,7 +67,7 @@ API 只面向本机面板，所有请求经统一守卫：
 - `Host` 非回环名 → 403（同时封 DNS rebinding）
 - 只读接口，不写入任何状态；不改变会话、不触发压缩
 
-**边界要说清**：守卫按同源判定放行**无请求头的本机调用**（这是 dsh-instance-manager / dsh-treekeeper 的一致姿态，面板之外的主机侧工具也依赖它）。实测：开启鉴权的 alpha host 上 `POST /api/session.list` 无 cookie 返回 401，而本路由仍返回 200 —— 即**本机上任意进程都能读到会话标题与正文摘要**，比只读端口列表的插件敏感。DSH 目前没把签名 cookie 校验器（`BrowserAuth.isAuthenticated`）作为 ctx 服务暴露给插件，所以复用宿主鉴权暂时做不到；把这三条同源检查当作"挡住远程页面与跨站请求"，不要当作"挡住本机进程"。
+**边界要说清**：守卫按同源判定放行**无请求头的本机调用**（这是 dsh-instance-manager / dsh-treekeeper 的一致姿态，面板之外的主机侧工具也依赖它）。实测：开启鉴权的 alpha host 上 `POST /api/session/list` 无 cookie 返回 401，而本路由仍返回 200 —— 即**本机上任意进程都能读到会话标题与正文摘要**，比只读端口列表的插件敏感。DSH 目前没把签名 cookie 校验器（`BrowserAuth.isAuthenticated`）作为 ctx 服务暴露给插件，所以复用宿主鉴权暂时做不到；把这三条同源检查当作"挡住远程页面与跨站请求"，不要当作"挡住本机进程"。
 
 ## 边界
 
@@ -97,7 +97,7 @@ API 只面向本机面板，所有请求经统一守卫：
 npm test          # node --test
 ```
 
-- CI 见 `.github/workflows/compat.yml`：语法检查、插件形态检查、单测、`npm pack --dry-run`、清单一致性；另有 Windows 真 DSH boot-check，按 `@alpha` / `@latest` 两条版本线各跑一次（同源守卫回归 + 通过 harness 自身的 `POST /api/session.create` 建立 live 会话，把 `measure` 的正路径与整条返回契约跑一遍）
+- CI 见 `.github/workflows/compat.yml`：语法检查、插件形态检查、单测、`npm pack --dry-run`、清单一致性；另有 Windows 真 DSH boot-check，按 `@alpha` / `@latest` 两条版本线各跑一次。两条线的寻址方式并不一致，所以 boot-check 从 host 注入的 shell HTML 里读 client bundle 的真实地址（alpha 是带 `rev` 的 combo URL，猜就 404），RPC 建会话则 `session.create` / `session/create` 两种形态都探一次，再用它拿到的 live 会话把 `measure` 正路径与整条返回契约跑一遍（含同源守卫回归）
 - CI 的 boot-check 没有模型路由，测到的 surface 恒为 0 节点，逐行契约在那里够不着——这部分由 `test/http.test.js` 用真实 socket 与有流量的定价面覆盖，CI 会显式打一条 `::notice::` 说明跳过
 - 发布：改 `package.json` + `lib/shared.js` 的 `VERSION` + `CHANGELOG.md`，打 tag 推上去，`.github/workflows/publish.yml` 校验 tag 一致性后 `npm publish --provenance`（npm Trusted Publishing / OIDC，仓库不设 token secret），再用 `CHANGELOG.md` 对应小节建 GitHub release
 - 运行中的实例**不要**以符号链接挂载本仓库：文件变动触发 HMR 热重载，多文件编辑的中间态可能拖垮实例
