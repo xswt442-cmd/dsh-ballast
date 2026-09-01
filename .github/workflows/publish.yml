@@ -17,11 +17,7 @@ jobs:
       contents: write # create the GitHub release
       id-token: write # npm provenance (OIDC)
     steps:
-      # Full history so the annotated tag object is present locally: the release
-      # step below reads its message with `git for-each-ref`.
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -78,9 +74,22 @@ jobs:
         shell: bash
         run: |
           # The tag carries its own notes, so nothing has to be kept in sync inside
-          # the tree and the ritual stays one `git tag -a`. A lightweight tag has
-          # no message of its own, so this reads the tagged commit's instead.
-          notes=$(git for-each-ref --format='%(contents)' "refs/tags/${GITHUB_REF_NAME}")
+          # the tree and the ritual stays one `git tag -a`. Read them through the
+          # API, not local git: the checkout peels the tag ref to its commit, so
+          # `git for-each-ref --format='%(contents)'` silently returns the commit
+          # message here. The ref object reports its real type.
+          obj=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}" \
+            --jq '.object.type + " " + .object.sha')
+          type=${obj%% *}
+          sha=${obj##* }
+          case "$type" in
+            tag) notes=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" --jq .message) ;;
+            commit)
+              notes=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${sha}" --jq .message)
+              echo "::warning::${GITHUB_REF_NAME} is a lightweight tag - notes are the commit message"
+              ;;
+            *) notes= ;;
+          esac
           if [ -z "${notes//[[:space:]]/}" ]; then
             notes="Release ${GITHUB_REF_NAME}"
             echo "::warning::no usable tag message - cut annotated tags for real notes"
