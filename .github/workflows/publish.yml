@@ -67,7 +67,6 @@ jobs:
         run: npm publish --provenance --access public
 
       - name: GitHub release with CHANGELOG notes
-        if: steps.published.outputs.already != 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -83,4 +82,13 @@ jobs:
             }
             console.log(out.join('\n').trim()||'Release '+v);
           ")
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"
+          # Not gated on the publish step: a version published out of band - like
+          # the first one, before npm knows this package name at all - still needs
+          # its notes here. Re-running once npm auth exists must converge rather
+          # than fail over an occupied name, so an existing release is updated.
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "::warning::release ${GITHUB_REF_NAME} already exists - refreshing its notes"
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"
+          fi

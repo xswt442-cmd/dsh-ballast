@@ -100,6 +100,7 @@ npm test          # node --test
 - CI 见 `.github/workflows/compat.yml`：语法检查、插件形态检查、单测、`npm pack --dry-run`、清单一致性；另有 Windows 真 DSH boot-check，按 `@alpha` / `@latest` 两条版本线各跑一次。两条线的寻址方式并不一致，所以 boot-check 从 host 注入的 shell HTML 里读 client bundle 的真实地址（alpha 是带 `rev` 的 combo URL，猜就 404），RPC 建会话则 `session.create` / `session/create` 两种形态都探一次，再用它拿到的 live 会话把 `measure` 正路径与整条返回契约跑一遍（含同源守卫回归）
 - CI 的 boot-check 没有模型路由，测到的 surface 恒为 0 节点，逐行契约在那里够不着——这部分由 `test/http.test.js` 用真实 socket 与有流量的定价面覆盖，CI 会显式打一条 `::notice::` 说明跳过
 - 发布：改 `package.json` + `lib/shared.js` 的 `VERSION` + `CHANGELOG.md`，打 tag 推上去，`.github/workflows/publish.yml` 校验 tag 一致性后 `npm publish --provenance`（npm Trusted Publishing / OIDC，仓库不设 token secret），再用 `CHANGELOG.md` 对应小节建 GitHub release
+- 首发例外：npm 无法为一个它从没见过的包名配置 Trusted Publisher，所以**第一个版本必须由登录过的 npm 账号本地 `npm publish` 一次**，之后在包页面把本仓库 + `publish.yml` 加进 Trusted Publisher，后续 tag 才全自动（v0.2.0 的 tag 正是卡在这一步：`404 PUT registry.npmjs.org/dsh-ballast`）
 - 运行中的实例**不要**以符号链接挂载本仓库：文件变动触发 HMR 热重载，多文件编辑的中间态可能拖垮实例
 - 本地验证用独立 `DSH_HOME` 与专用 profile，把 checkout 装进去而不是改线上配置：
   `DSH_HOME=<隔离目录> dsh plugin --profile dev add file:E:/.codes/createhelper/dsh-ballast`，
