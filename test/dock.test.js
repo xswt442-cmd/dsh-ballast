@@ -72,7 +72,7 @@ function makeEnv() {
 function loadDock(env) {
   const evaluate = new Function(
     'window', 'document', 'localStorage', 'ResizeObserver', 'MutationObserver',
-    `${DOCK_SRC}\nreturn { getUtilityDock, isCompatibleDock, DOCK_KEY, DOCK_SNAPSHOT }`
+    `${DOCK_SRC}\nreturn { getUtilityDock, isCompatibleDock, safeDockIcon, DOCK_KEY, DOCK_SNAPSHOT }`
   )
   return evaluate(env.window, env.document, env.localStorage, undefined, undefined)
 }
@@ -142,6 +142,75 @@ test('items render as one ordered button each, labelled and pressed', () => {
   assert.equal(dockEl.children[2].getAttribute('aria-pressed'), 'true')
   assert.equal(dockEl.children[0].getAttribute('aria-pressed'), 'false')
   assert.equal(dockEl.children[0].getAttribute('aria-label'), 'DSH Instance')
+})
+
+test('the icon gate admits presentational svg and refuses the rest', () => {
+  const { safeDockIcon } = loadDock(makeEnv())
+  const admitted = [
+    '<svg></svg>',
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M4 5h16M6 12h12M9 19h6"></path></svg>',
+    '<svg><g transform="translate(1 1)"><circle cx="4" cy="4" r="2"></circle></g></svg>',
+    '  <svg><rect x="1" y="2" width="3" height="4"></rect></svg>  ',
+    '<svg fill="url(#grad)"><path d="M0 0"></path></svg>'
+  ]
+  for (const icon of admitted) {
+    assert.equal(safeDockIcon(icon), true, `${icon} is a glyph, not a script`)
+  }
+  const rejected = [
+    '<svg onload="alert(1)"></svg>',
+    '<svg onload=alert(1)></svg>',
+    '<svg/onclick=alert(1)></svg>',
+    '<svg><script>alert(1)</script></svg>',
+    '<svg><foreignObject><body xmlns="http://www.w3.org/1999/xhtml">x</body></foreignObject></svg>',
+    '<svg><use href="#elsewhere"></use></svg>',
+    '<svg><image href="https://evil/x.png"></image></svg>',
+    '<svg style="background:url(https://evil)"></svg>',
+    '<svg fill="url(https://evil/x.svg#p)"></svg>',
+    '<svg><animate attributeName="onclick" values="alert(1)"></animate></svg>',
+    '<img src="x" onerror="alert(1)">',
+    '<svg><a href="javascript:alert(1)">x</a></svg>',
+    // A quoted value that carries a tag boundary moves `>` past the scanner.
+    '<svg viewBox="0 0 24 24" fill="none"><path d="M4 onload=alert(1)>5"></path></svg>',
+    '<svg><!--<script>--></script></svg>',
+    '<svg><![CDATA[</svg><script>alert(1)</script>]]></svg>',
+    '<svg width="16></svg>',
+    undefined,
+    null,
+    42,
+    { toString() { return '<svg></svg>' } }
+  ]
+  for (const icon of rejected) {
+    assert.equal(safeDockIcon(icon), false, `${String(icon)} must not reach innerHTML`)
+  }
+})
+
+test('an admitted icon reaches the button; a rejected one renders a fallback', () => {
+  const env = makeEnv()
+  const api = loadDock(env).getUtilityDock()
+  api.register(item('treekeeper', { label: 'TreeKeeper', order: 10, icon: '<svg></svg>' }))
+  api.register(item('ballast', { label: 'ballast', order: 20, icon: '<svg onload="alert(1)"></svg>' }))
+  api.register(item('dim', { label: 'DSH Instance', order: 30 }))
+  const buttons = env.document.body.children[0].children
+  assert.equal(buttons[0].innerHTML, '<svg></svg>')
+  assert.equal(buttons[1].innerHTML, '', 'the rejected markup must never be assigned')
+  assert.equal(buttons[1].textContent, 'ba')
+  assert.equal(buttons[2].textContent, 'DS')
+  // The label still identifies the item whatever the icon turned into.
+  assert.equal(buttons[1].getAttribute('aria-label'), 'ballast')
+  assert.equal(buttons[1].title, 'ballast')
+})
+
+test('update() cannot walk a poisoned icon past the gate', () => {
+  const env = makeEnv()
+  const api = loadDock(env).getUtilityDock()
+  const handle = api.register(item('ballast', { label: 'ballast', icon: '<svg></svg>' }))
+  const live = () => env.document.body.children[0].children[0]
+  assert.equal(live().innerHTML, '<svg></svg>')
+  handle.update({ icon: '<svg><script>alert(1)</script></svg>' })
+  assert.equal(live().innerHTML, '', 'a re-render must not assign the new markup')
+  assert.equal(live().textContent, 'ba')
 })
 
 test('activating one item deactivates the others', () => {

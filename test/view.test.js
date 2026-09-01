@@ -25,7 +25,8 @@ const VIEW_SRC = region(CLIENT_SRC, VIEW_MARK, PANEL_MARK)
 const PANEL_SRC = region(CLIENT_SRC, PANEL_MARK, PLUGIN_MARK)
 
 const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
-  'timeLabel', 'baselineLabel', 'shadowBadge']
+  'timeLabel', 'baselineLabel', 'shadowBadge',
+  'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge']
 
 const view = new Function(`${VIEW_SRC}
 return { ${HELPERS.join(', ')} }`)()
@@ -109,6 +110,53 @@ test('the shadow-price badge matches what the host actually omitted', () => {
   assert.ok(!partial.title.includes('此 DSH 宿主不提供'), 'partial must not claim the host lacks shadow pricing')
 })
 
+test('an unpriced row gets no bar, and the smallest priced row stays visible', () => {
+  assert.equal(view.barWidth({ tokens: 1000 }, 1000), '100%')
+  assert.equal(view.barWidth({ tokens: 1 }, 1000), '2%')
+  // A 0.1% sliver would read as "this row is cheap"; the truth is "no number".
+  assert.equal(view.barWidth({ tokens: null }, 1000), '0%')
+  assert.equal(view.barWidth({ tokens: '900' }, 1000), '0%')
+  assert.equal(view.barWidth({ tokens: NaN }, 1000), '0%')
+  // With nothing measured, every row is 0% rather than a division by zero.
+  assert.equal(view.barWidth({ tokens: 5 }, 0), '0%')
+  assert.equal(view.barWidth({ tokens: 5 }, null), '0%')
+})
+
+test('the share legend names the type, the fraction and the volume', () => {
+  const line = view.shareLabel({ type: 'user/message', tokens: 4321, count: 3, share: 0.25 })
+  assert.equal(line, '用户 25.0% · 4,321 tokens / 3 条')
+  // An unknown type label falls through to the raw type, like the row list does.
+  assert.match(view.shareLabel({ type: 'future/kind', tokens: 0, count: 0, share: 0 }), /^future\/kind 0\.0%/)
+  assert.equal(view.sharePct(0.256, 1), '25.6')
+  assert.equal(view.sharePct(0.256, 0), '26')
+  // share is host-computed; a missing one must not paint "NaN%" as a bar width.
+  for (const junk of [null, undefined, NaN, '0.4', {}]) {
+    assert.equal(view.sharePct(junk, 2), '0', `${String(junk)} is not a share`)
+  }
+})
+
+test('unpriced rows are announced as a count, not silently dropped', () => {
+  assert.equal(view.unpricedNote({ unpricedCount: 0 }), null)
+  assert.equal(view.unpricedNote(null), null)
+  assert.equal(view.unpricedNote(undefined), null)
+  const note = view.unpricedNote({ unpricedCount: 2 })
+  assert.equal(note.label, '2 条价格不可读')
+  assert.ok(note.title.includes('不代表 0'), 'the note must say absence is not zero')
+})
+
+test('snapshot age is reported only when both clocks are readable', () => {
+  const t = 1_700_000_000_000
+  assert.equal(view.snapshotAge(t, t + 3_000), '3 秒前')
+  assert.equal(view.snapshotAge(t, t + 150_000), '2 分钟前')
+  assert.equal(view.snapshotAge(t, t + 7_200_000), '2 小时前')
+  // A clock that went backwards means the page time is not trustworthy; say nothing.
+  assert.equal(view.snapshotAge(t, t - 1), '')
+  for (const junk of [null, undefined, 'now', {}]) {
+    assert.equal(view.snapshotAge(junk, t), '', `${String(junk)} is not a receive time`)
+    assert.equal(view.snapshotAge(t, junk), '', `${String(junk)} is not a clock reading`)
+  }
+})
+
 test('the panel calls every helper instead of formatting inline', () => {
   const calls = [
     'fmt(measurement.totalTokens)',
@@ -119,20 +167,29 @@ test('the panel calls every helper instead of formatting inline', () => {
     'rowText(row)',
     'textHint(row)',
     'timeLabel(row.time)',
-    'fmtSigned(row.priceDelta)'
+    'fmtSigned(row.priceDelta)',
+    'barWidth(row, max)',
+    'sharePct(group.share, 2)',
+    'shareLabel(group)',
+    'unpricedNote(measurement)',
+    'snapshotAge(state.receivedAt, Date.now())'
   ]
   for (const call of calls) {
     assert.ok(PANEL_SRC.includes(call), `panel does not call ${call}`)
   }
+  assert.ok(!PANEL_SRC.includes('.toFixed('),
+    'number formatting must live in a view helper, not in the panel')
   assert.ok(!PANEL_SRC.includes('.baseline.kind'),
     'the panel must read the baseline through baselineLabel')
+  assert.ok(!PANEL_SRC.includes('row.tokens / max'),
+    'bar sizing must live in barWidth, not inline')
   assert.ok(!/>0 \? '\+' : ''/.test(PANEL_SRC),
     'sign handling must live in fmtSigned, not inline')
-  // measure_failed carries the reason measure() threw; a bare code tells the
-  // user nothing, so both fetch paths must prefer the message.
+  // measure_failed and top_partial carry the reason the host threw; a bare code
+  // tells the user nothing, so every api path must prefer the message.
   const withMessage = PANEL_SRC.match(/body\.error \|\| body\.code/g) || []
-  assert.equal(withMessage.length, 2,
-    'both api paths should surface the host error message')
+  assert.equal(withMessage.length, 3,
+    'every api path should surface the host error message')
 })
 
 test('the panel surfaces every row field the meter emits', () => {
@@ -140,6 +197,14 @@ test('the panel surfaces every row field the meter emits', () => {
   // comment must not pass this.
   for (const field of ['row.priceDelta', 'row.routePriced', 'row.surfaceOp',
     'row.preview', 'row.tokens', 'row.seq', 'row.time', 's.title']) {
+    assert.ok(PANEL_SRC.includes(field), `panel never reads ${field}`)
+  }
+})
+
+test('the panel surfaces the aggregate and the cross-session result', () => {
+  for (const field of ['measurement.byType', 'host.sessions', 'host.limit',
+    'host.failures', 'host.failedCount', 'entry.surfaceTokens', 'entry.title',
+    'entry.rows', 'group.share']) {
     assert.ok(PANEL_SRC.includes(field), `panel never reads ${field}`)
   }
 })

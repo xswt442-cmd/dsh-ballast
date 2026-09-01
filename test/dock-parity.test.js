@@ -50,6 +50,17 @@ test('the dock entry is registered the way the protocol requires', () => {
   assert.ok(!/\btitle\s*:/.test(registration), 'the dock labels items with `label`, not `title`')
 })
 
+test('the icon ballast registers is one the shared dock will admit', () => {
+  // safeDockIcon is defined without touching the DOM, so the canonical bytes
+  // can be evaluated as-is here.
+  const safeDockIcon = new Function(`${DOCK_SRC}\nreturn safeDockIcon`)()
+  const literal = /const BALLAST_ICON = ('[^']*'|"[^"]*")/.exec(CLIENT_SRC)
+  assert.ok(literal, 'client.js does not declare BALLAST_ICON')
+  const icon = new Function(`return ${literal[1]}`)()
+  assert.equal(safeDockIcon(icon), true,
+    'the dock would render a fallback for the icon ballast ships')
+})
+
 test('ballast self-bootstraps instead of waiting for another plugin', () => {
   // Single-install was the M1 blocker: joining a dock only DIM/DTK create means
   // no entry point at all when ballast is the only plugin installed.
