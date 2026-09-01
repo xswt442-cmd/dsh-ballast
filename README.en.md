@@ -10,9 +10,11 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 
 ## Features
 
-- **Per-entry attribution**: sorts the current surface by token occupancy and displays user messages, assistant messages, and tool results; when the host supplies a parseable timestamp, hovering `#seq` shows when the entry was written.
+- **Per-entry attribution**: sorts the current surface by token occupancy and displays user messages, assistant messages, and tool results; when the host supplies a parseable timestamp, hovering `#seq` shows when the entry was written. The footer reports how old the snapshot is and the log revision it was measured at.
 - **Content previews**: resolves tool names for results, counts reasoning and images without inlining them, and truncates text at 220 code points after whitespace collapsing; `preview.chars` and `preview.truncated` record the pre-truncation length, which a clipped row repeats in its tooltip.
-- **Route-price difference**: rows show the route price, and rows whose two prices differ carry a `Δ` badge whose tooltip holds both; the totals bar counts the repriced rows. `Δ` can only come from images repriced as visual tokens.
+- **Route-price difference**: rows show the route price, and rows whose two prices differ carry a `Δ` badge whose tooltip holds both; the totals bar counts the repriced rows. `Δ` can only come from images repriced as visual tokens. A row whose price the host did not send as a parseable number shows `—`, gets no occupancy bar, and the totals bar states how many such rows there are.
+- **Per-type share**: below the totals, a share bar segmented by message type with a legend (percentage, tokens, entry count), aggregated once on the host side instead of summed separately by each view.
+- **Cross-session top**: one read measures every live session on this machine and orders them by their heaviest entry; clicking a row returns to that session's per-entry list. A session whose measurement fails only increments the failure count, whose tooltip carries the reasons, and the remaining results stand.
 - **Session selection**: lists live sessions on the current host; a title is the latest `session/title` event, falling back to the workspace basename and then the session ID.
 - **Utility Dock**: the entry point is the shared page-level dock, placed next to the sidebar at the bottom-left by default, switchable to bottom-right or hidden, with the choice stored in `localStorage`.
 
@@ -34,6 +36,9 @@ Per-entry route pricing exists only on the host. The plugin binds services insid
 |---|---|---|
 | `sessions` | GET | Returns the live sessions on this host (`sessionId`, `eventCount`, title and title source) plus service availability; the default action |
 | `measure&sessionId=` | GET | Calls `tokenMeter.measure()` and returns per-entry measurement for one session |
+| `top&limit=` | GET | Measures each live session and returns its heaviest `limit` entries; `limit` defaults to 5 and is clamped to 1-20 |
+
+The route accepts `GET` and `HEAD` only; any other method gets `405` with an `Allow` header.
 
 Main fields:
 
@@ -45,15 +50,18 @@ Main fields:
 | `surfaceTokens` | Sum of `tokens` across the current surface |
 | `baseline.kind` | `none`, `estimated`, or `usage` (a provider usage anchor); `baseline.tokens` is the anchor value |
 | `totalTokens` | Total current request-and-response context pressure |
+| `unpricedCount` | Rows whose `tokens` was not a parseable number; these render `—` |
+| `byType` | Host-side aggregate per type: `{ total, types[] }`, where `total` sums only the rows that carry a number |
 
-The list contains the current surface only. An old `append` folded away by a compaction `replace` is no longer shown. Without images, or when the route declares no image pricing, `tokens` equals `heuristicTokens`. `Δ` is therefore neither an anomaly score nor a measure of content importance. With `baseline.kind` set to `none`, the totals bar names the kind without an anchor count: no anchor is not the same statement as an anchor of 0. A payload that matches no known surface message shape is labelled `未识别正文` (unrecognised) rather than empty.
+The list contains the current surface only. An old `append` folded away by a compaction `replace` is no longer shown. Without images, or when the route declares no image pricing, `tokens` equals `heuristicTokens`. `Δ` is therefore neither an anomaly score nor a measure of content importance. With `baseline.kind` set to `none`, the totals bar names the kind without an anchor count: no anchor is not the same statement as an anchor of 0. A payload that matches no known surface message shape is labelled `未识别正文` (unrecognised) rather than empty. The share bar divides by `byType.total`, the sum over rows that carry a number, rather than by the host's `surfaceTokens`; a type's `count` still includes its unpriced rows.
 
 ## Security model
 
-- Every action is read-only: no state writes, message deletion, or compaction.
+- Every action is read-only: no state writes, message deletion, or compaction. The boundary is expressed by the method gate, which rejects mutation-shaped verbs with `405`.
 - The API validates Fetch Metadata, `Origin`, and loopback `Host`, rejecting cross-site requests and DNS rebinding.
 - Local processes remain inside the trust boundary: a process that can reach the DSH Web port can read session titles, the truncated content previews and their pre-truncation lengths, and the pid, port, and start time in the `sessions` reply.
 - Unavailable services, ended sessions, and per-session measurement failures return distinct errors without affecting other sessions.
+- The shared dock treats a registrant's `icon` as untrusted markup: only a presentational inline SVG reaches `innerHTML`, and anything else renders as the item's label text.
 
 ## Platform and limits
 
@@ -64,6 +72,7 @@ The list contains the current surface only. An old `append` folded away by a com
 | Older token meter | Basic measurement remains available; when the shadow price is absent, `Δ` and the spread count are hidden and the totals bar shows `无影子价` (no shadow price) or, for a partially priced surface, `影子价不全` |
 
 - Measures live sessions on the current host only.
+- The cross-session view runs one measurement per live session, so its cost grows with the session count; it is triggered on demand and is not the default view.
 - No budgets, price tables, compaction prediction, or lossless content export.
 - Capabilities are derived from returned data rather than guessed from version strings.
 
