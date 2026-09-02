@@ -232,6 +232,23 @@ test('listSessions is heaviest-first and carries a display title', () => {
   ])
 })
 
+test('listSessions tolerates a session whose event log is not initialized yet', () => {
+  const pending = { id: 'pending', header: {} }
+  const ctx = makeFenceCtx({
+    tokenMeter: { measure: () => measurement },
+    sessions: { list: () => [pending], get: () => pending }
+  })
+  assert.deepEqual(createMeterBridge(ctx).listSessions(), [
+    { sessionId: 'pending', eventCount: 0, title: 'pending', titleSource: 'id' }
+  ])
+})
+
+test('shapeMeasurement tolerates an uninitialized event log', () => {
+  const out = shapeMeasurement({ ...measurement, nodes: [] }, { id: 'pending' })
+  assert.equal(out.eventCount, 0)
+  assert.deepEqual(out.rows, [])
+})
+
 // ---- M1 row columns ----------------------------------------------------
 test('rows expose the route-vs-heuristic spread', () => {
   const out = shapeMeasurement({
