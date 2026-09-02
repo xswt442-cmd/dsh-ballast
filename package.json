@@ -1,11 +1,12 @@
 {
   "name": "dsh-ballast",
-  "version": "0.2.2",
-  "description": "DSH 上下文压舱物归因面板：用 host-only 的 ctx.tokenMeter 逐条消息计量窗口占用（不看花了多少钱，看窗口被谁占了），标出最该抛掉的那几条。Per-message context-window attribution for DeepSeek Harness via the host-only token meter.",
+  "version": "0.2.3",
+  "description": "DSH Web 上下文窗口归因面板：通过 host token meter 按消息显示当前 surface 的 token 占用与摘要。Read-only per-message context-window attribution for DSH Web using the host token meter.",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "exports": {
     ".": "./lib/index.js",
@@ -24,7 +25,7 @@
   "dshhub": {
     "schemaVersion": 1,
     "displayName": "ballast",
-    "summary": "窗口占用归因引擎：按消息条目计量上下文窗口占用（surface tokens 路由定价 + heuristic 影子价），标出最占坑的消息。不看花了多少钱，看窗口被谁占了。",
+    "summary": "按消息计量当前 surface 的 token 占用，提供类型聚合与跨会话 Top；只读，不修改会话或触发 compaction。",
     "categories": ["dev", "Web UI"],
     "surfaces": ["host", "web"],
     "capabilities": {},

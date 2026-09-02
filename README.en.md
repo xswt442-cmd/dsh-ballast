@@ -6,94 +6,66 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-A DSH Web context-window attribution plugin. It shows token occupancy and content previews for each message on the current surface, exposing what is filling the window. The plugin is read-only: it does not estimate spend, modify sessions, or trigger compaction.
+A DSH Web context-window attribution plugin. It shows token occupancy and content previews for each entry on the current surface, helping identify what fills the window. It is read-only: it does not estimate spend, modify sessions, or trigger compaction.
 
 ## Features
 
-- **Per-entry attribution**: sorts the current surface by token occupancy and displays user messages, assistant messages, and tool results; when the host supplies a parseable timestamp, hovering `#seq` shows when the entry was written. The footer reports how old the snapshot is and the log revision it was measured at.
-- **Content previews**: resolves tool names for results, counts reasoning and images without inlining them, and truncates text at 220 code points after whitespace collapsing; `preview.chars` and `preview.truncated` record the pre-truncation length, which a clipped row repeats in its tooltip.
-- **Route-price difference**: rows show the route price, and rows whose two prices differ carry a `Δ` badge whose tooltip holds both; the totals bar counts the repriced rows. `Δ` can only come from images repriced as visual tokens. A row whose price the host did not send as a parseable number shows `—`, gets no occupancy bar, and the totals bar states how many such rows there are.
-- **Per-type share**: below the totals, a share bar segmented by message type with a legend (percentage, tokens, entry count), aggregated once on the host side instead of summed separately by each view.
-- **Cross-session top**: one read measures every live session on this machine and orders them by their heaviest entry; clicking a row returns to that session's per-entry list. A session whose measurement fails only increments the failure count, whose tooltip carries the reasons, and the remaining results stand.
-- **Session selection**: lists live sessions on the current host; a title is the latest `session/title` event, falling back to the workspace basename and then the session ID.
-- **Utility Dock**: the entry point is the shared page-level dock, placed next to the sidebar at the bottom-left by default, switchable to bottom-right or hidden, with the choice stored in `localStorage`.
+- List user messages, assistant messages, and tool results by token occupancy. Text is whitespace-collapsed and truncated; tool results show their tool name, while reasoning blocks and images are counted but not inlined.
+- Show the current route price and, when the host supplies a heuristic shadow price, mark the difference. A difference only indicates that an image may have been repriced as visual tokens; it is not an anomaly or an importance score.
+- Show token share aggregated by message type and the heaviest entry in each live session on the current host.
+- List live sessions on the current host and open the panel from the Mini Utility Dock; when a title is missing, fall back to the workspace basename and session ID.
 
 ## Install
 
 ```powershell
+# install from npm and register with the web profile (recommended)
 dsh plugin --profile web add dsh-ballast
-# or install from Git
+
+# download the npm package only
+npm install dsh-ballast
+
+# or install from GitHub
 dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 ```
 
-Restart DSH Web, then open `ballast` from the shared Dock.
+`npm install` downloads the package only; it does not enable the DSH profile. To use the plugin in DSH, add its bundle to a profile. Restart DSH Web after installation and open `ballast` from the Mini Utility Dock.
 
-## How it works
+## Usage
 
-Per-entry route pricing exists only on the host. The plugin binds services inside `ctx.inject(['tokenMeter', 'sessions'])` and exposes the result to its panel through the same-origin API `/dsh-ballast/api`.
+The panel has two views:
 
-| Action | Method | Description |
-|---|---|---|
-| `sessions` | GET | Returns the live sessions on this host (`sessionId`, `eventCount`, title and title source) plus service availability; the default action |
-| `measure&sessionId=` | GET | Calls `tokenMeter.measure()` and returns per-entry measurement for one session |
-| `top&limit=` | GET | Measures each live session and returns its heaviest `limit` entries; `limit` defaults to 5 and is clamped to 1-20 |
+- **Current session**: inspect occupancy, type, time, and preview for each entry on the current surface. Entries folded away by a compaction `replace` are not shown.
+- **Cross-session top**: on demand, measure each live session on the current host once and sort sessions by their heaviest entry. Cost grows with the session count; one failed session does not block the others.
 
-The route accepts `GET` and `HEAD` only; any other method gets `405` with an `Allow` header.
+The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessions` lists sessions, `measure&sessionId=` measures one session, and `top&limit=` returns cross-session results. The route accepts `GET` and `HEAD` only. Rows without a parseable token price are marked unpriced and excluded from occupancy bars and token shares.
 
-Main fields:
+## Limits and security
 
-| Field | Meaning |
-|---|---|
-| `tokens` | Token price of the entry under the current routed model |
-| `heuristicTokens` | Fixed-density heuristic shadow price; `null` on older hosts |
-| `priceDelta` | `tokens - heuristicTokens`, or `null` without a shadow price; non-zero implies an image was repriced, not the reverse (a repriced row can still cost the same) |
-| `surfaceTokens` | Sum of `tokens` across the current surface |
-| `baseline.kind` | `none`, `estimated`, or `usage` (a provider usage anchor); `baseline.tokens` is the anchor value |
-| `totalTokens` | Total current request-and-response context pressure |
-| `unpricedCount` | Rows whose `tokens` was not a parseable number; these render `—` |
-| `byType` | Host-side aggregate per type: `{ total, types[] }`, where `total` sums only the rows that carry a number |
+- Measures live sessions on the current host only; it does not read ended sessions or sessions on other hosts.
+- All operations are read-only: no state writes, message deletion, or compaction; there are no budgets, price tables, compaction forecasts, or content exports.
+- The API validates Fetch Metadata, `Origin`, and the loopback `Host`, rejecting cross-site requests and DNS rebinding; mutation-shaped methods return `405`.
+- A local process that can reach the DSH Web port remains inside the trust boundary and can read session titles, truncated previews and their original lengths, plus process metadata in the session list.
+- Missing host services, ended sessions, and per-session measurement failures return explicit errors. Older hosts without shadow prices retain basic measurement but hide price-difference data.
 
-The list contains the current surface only. An old `append` folded away by a compaction `replace` is no longer shown. Without images, or when the route declares no image pricing, `tokens` equals `heuristicTokens`. `Δ` is therefore neither an anomaly score nor a measure of content importance. With `baseline.kind` set to `none`, the totals bar names the kind without an anchor count: no anchor is not the same statement as an anchor of 0. A payload that matches no known surface message shape is labelled `未识别正文` (unrecognised) rather than empty. The share bar divides by `byType.total`, the sum over rows that carry a number, rather than by the host's `surfaceTokens`; a type's `count` still includes its unpriced rows.
+## Platform and compatibility
 
-## Security model
-
-- Every action is read-only: no state writes, message deletion, or compaction. The boundary is expressed by the method gate, which rejects mutation-shaped verbs with `405`.
-- The API validates Fetch Metadata, `Origin`, and loopback `Host`, rejecting cross-site requests and DNS rebinding.
-- Local processes remain inside the trust boundary: a process that can reach the DSH Web port can read session titles, the truncated content previews and their pre-truncation lengths, and the pid, port, and start time in the `sessions` reply.
-- Unavailable services, ended sessions, and per-session measurement failures return distinct errors without affecting other sessions.
-- The shared dock treats a registrant's `icon` as untrusted markup: only a presentational inline SVG reaches `innerHTML`, and anything else renders as the item's label text.
-
-## Platform and limits
-
-| Item | Requirement / behavior |
-|---|---|
+| Item | Requirement |
+| --- | --- |
 | DSH | `>=0.1.2-alpha.2` |
 | Node.js | `>=20` |
-| Older token meter | Basic measurement remains available; when the shadow price is absent, `Δ` and the spread count are hidden and the totals bar shows `无影子价` (no shadow price) or, for a partially priced surface, `影子价不全` |
 
-- Measures live sessions on the current host only.
-- The cross-session view runs one measurement per live session, so its cost grows with the session count; it is triggered on demand and is not the default view.
-- No budgets, price tables, compaction prediction, or lossless content export.
-- Capabilities are derived from returned data rather than guessed from version strings.
+Capabilities are derived from host-returned data rather than guessed from version strings. The plugin supports the current surface and token-meter data exposed by the host.
 
-## Layout
+## Development and verification
 
-```text
-lib/index.js    host entry and same-origin API
-lib/meter.js    tokenMeter injection, session titles, result shaping
-lib/preview.js  message and tool-result previews
-lib/client.js   Dock entry and panel
-lib/dock.js     shared Dock protocol implementation
-test/           unit and HTTP integration tests
-```
-
-Run the tests:
+Do not symlink the development repository into a running DSH profile: HMR can load an intermediate multi-file edit and terminate the instance. After changes, run:
 
 ```powershell
 npm test
+npm run docs:check
+Get-ChildItem lib/*.js | ForEach-Object { node --check $_.FullName }
+npm pack --dry-run
 ```
-
-Do not symlink the development repository into an active profile: HMR can load an intermediate multi-file edit and terminate the DSH instance.
 
 ## License
 

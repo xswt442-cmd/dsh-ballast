@@ -1,13 +1,16 @@
 name: publish
 
-# Release ritual = one command: bump package.json + lib/shared.js, tag with
-# `git tag -a vX.Y.Z -m '<notes>'`, push --tags. This workflow verifies the tag,
-# publishes to npm with provenance, and cuts a GitHub release whose notes are
-# the tag message. Annotated tags only - a lightweight tag carries no notes.
+# A release updates package.json, lib/shared.js, and both changelogs, then tags
+# the release commit as vX.Y.Z. This workflow verifies that contract, publishes
+# to npm with provenance, and creates the GitHub release from CHANGELOG.md.
 
 on:
   push:
     tags: ['v*']
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -18,6 +21,8 @@ jobs:
       id-token: write # npm provenance (OIDC)
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -34,7 +39,7 @@ jobs:
             exit 1
           fi
 
-      - name: sanity checks
+      - name: release checks
         id: sanity
         shell: bash
         run: |
@@ -49,6 +54,8 @@ jobs:
           # no dependencies to install; this suite is what caught the fabricated
           # delta column the compat boot-check structurally cannot reach
           npm test
+          npm run docs:check
+          npm pack --dry-run
 
       - name: skip when version is already published
         id: published
@@ -67,33 +74,14 @@ jobs:
         if: steps.published.outputs.already != 'yes'
         run: npm publish --provenance --access public
 
-      - name: GitHub release with tag-message notes
+      - name: GitHub release from changelog (idempotent)
         if: always() && steps.sanity.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          # The tag carries its own notes, so nothing has to be kept in sync inside
-          # the tree and the ritual stays one `git tag -a`. Read them through the
-          # API, not local git: the checkout peels the tag ref to its commit, so
-          # `git for-each-ref --format='%(contents)'` silently returns the commit
-          # message here. The ref object reports its real type.
-          obj=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}" \
-            --jq '.object.type + " " + .object.sha')
-          type=${obj%% *}
-          sha=${obj##* }
-          case "$type" in
-            tag) notes=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" --jq .message) ;;
-            commit)
-              notes=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${sha}" --jq .message)
-              echo "::warning::${GITHUB_REF_NAME} is a lightweight tag - notes are the commit message"
-              ;;
-            *) notes= ;;
-          esac
-          if [ -z "${notes//[[:space:]]/}" ]; then
-            notes="Release ${GITHUB_REF_NAME}"
-            echo "::warning::no usable tag message - cut annotated tags for real notes"
-          fi
+          version=${GITHUB_REF_NAME#v}
+          notes=$(node scripts/release-notes.mjs "$version")
           # Not gated on the publish step: a version published out of band - like
           # the first one, before npm knows this package name at all - still needs
           # its notes here. Re-running once npm auth exists must converge rather
