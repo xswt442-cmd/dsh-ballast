@@ -3,6 +3,16 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.2.4 - 2026-09-02
+
+### Changed
+
+- The Mini Utility Dock is now synchronized at build time from `dsh-mini-utility-dock`, which owns the protocol tests.
+
+### Fixed
+
+- Tolerate newly created DSH alpha sessions whose event log is not initialized yet, preventing a 500 from the session-list route.
+
 ## 0.2.3 - 2026-09-02
 
 ### Changed

@@ -3,6 +3,16 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.2.4 - 2026-09-02
+
+### 变更
+
+- Mini Utility Dock 改由 `dsh-mini-utility-dock` 在构建时同步，协议测试归入公共包。
+
+### 修复
+
+- 兼容 DSH alpha 中事件日志尚未初始化的新建会话，避免会话列表接口返回 500。
+
 ## 0.2.3 - 2026-09-02
 
 ### 变更
