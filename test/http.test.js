@@ -79,6 +79,13 @@ async function mount(nodes) {
     },
     on(event, fn) {
       if (event === 'dispose') disposed.push(fn)
+    },
+    // cordis disposal idiom: the effect callback returns the cleanup (the
+    // host half registers its teardown this way).
+    effect(fn) {
+      const cleanup = fn()
+      const list = Array.isArray(cleanup) ? cleanup : [cleanup]
+      for (const fn2 of list) if (typeof fn2 === 'function') disposed.push(fn2)
     }
   }
   apply(ctx)
@@ -96,6 +103,8 @@ async function mount(nodes) {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const port = server.address().port
+  // Mirror DSH's webServer port so Origin validation exercises the real port.
+  ctx.webServer.port = port
   return {
     port,
     url: (query = '') => `http://127.0.0.1:${port}/dsh-ballast/api${query}`,
@@ -137,6 +146,9 @@ test('the guard rejects cross-site, foreign origin and rebound host, admits loop
   assert.equal((await send(host.url('?action=sessions'), { 'sec-fetch-site': 'cross-site' })).status, 403)
   assert.equal((await send(host.url('?action=sessions'), { origin: 'https://evil.example' })).status, 403)
   assert.equal((await send(host.url('?action=sessions'), { host: 'rebound.example' })).status, 403)
+  assert.equal((await send(host.url('?action=sessions'), { host: 'evil.localhost' })).status, 403)
+  assert.equal((await send(host.url('?action=sessions'), { origin: `http://127.0.0.1:${host.port + 1}` })).status, 403)
+  assert.equal((await send(host.url('?action=sessions'), { host: `[::1]:${host.port}`, origin: `http://[::1]:${host.port}` })).status, 200)
 
   const open = await send(host.url('?action=sessions'))
   assert.equal(open.status, 200)

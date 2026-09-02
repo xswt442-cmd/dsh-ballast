@@ -45,6 +45,26 @@ test('guard rejects a non-loopback Host (DNS rebinding)', () => {
   assert.equal(JSON.parse(res.body).code, 'non_loopback')
 })
 
+test('guard admits only exact loopback hosts and matching Origins', () => {
+  const guard = createGuard({ currentPort: () => 3080 })
+  const accepted = [
+    { host: 'localhost:3080', origin: 'http://localhost:3080' },
+    { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' },
+    { host: '[::1]:3080', origin: 'http://[::1]:3080' }
+  ]
+  for (const headers of accepted) assert.equal(guard({ headers }, mockRes()), true)
+
+  for (const headers of [
+    { host: 'evil.localhost:3080' },
+    { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3081' },
+    { host: '[::1]:3080', origin: 'http://[::1]:3081' }
+  ]) {
+    const res = mockRes()
+    assert.equal(guard({ headers }, res), false)
+    assert.equal(res.statusCode, 403)
+  }
+})
+
 test('guard passes same-origin and host-side (headerless) callers', () => {
   const guard = createGuard()
   assert.equal(guard({ headers: { 'sec-fetch-site': 'same-origin', host: '127.0.0.1:3080' } }, mockRes()), true)
