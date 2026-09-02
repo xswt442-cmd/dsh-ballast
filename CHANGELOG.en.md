@@ -3,6 +3,16 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.2.5 - 2026-09-03
+
+### Changed
+
+- Host cleanup now follows the Cordis effect lifecycle; compatibility CI covers DSH latest/alpha on Windows and Ubuntu.
+
+### Fixed
+
+- Tightened the local HTTP guard to exact loopback hosts and Origins on the active Web port, with correct IPv6 `[::1]` support.
+
 ## 0.2.4 - 2026-09-02
 
 ### Changed

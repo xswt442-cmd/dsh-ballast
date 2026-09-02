@@ -3,6 +3,16 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.2.5 - 2026-09-03
+
+### 变更
+
+- Host 清理改用 Cordis effect 生命周期；兼容 CI 覆盖 Windows 与 Ubuntu 的 DSH latest/alpha。
+
+### 修复
+
+- 收紧本地 HTTP 守卫：只接受精确回环主机、匹配当前 Web 端口的 Origin，并正确支持 IPv6 `[::1]`。
+
 ## 0.2.4 - 2026-09-02
 
 ### 变更

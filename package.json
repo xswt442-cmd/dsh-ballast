@@ -1,6 +1,6 @@
 {
   "name": "dsh-ballast",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "DSH Web 上下文窗口归因面板：通过 host token meter 按消息显示当前 surface 的 token 占用与摘要。Read-only per-message context-window attribution for DSH Web using the host token meter.",
   "type": "module",
   "main": "lib/index.js",
