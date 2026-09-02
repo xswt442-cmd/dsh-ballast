@@ -299,7 +299,9 @@ jobs:
             token=$(sed -n 's/.*[?&]token=\([^&[:space:]]*\).*/\1/p' /tmp/dsh-web-out.log /tmp/dsh-web-err.log | tail -n 1)
             url='http://127.0.0.1:3131/'
             if [ -n "$token" ]; then url="${url}?token=${token}"; announced=1; fi
-            status=$(curl -sS --noproxy '*' -c "$cookieJar" -b "$cookieJar" -o "$shellHtml" -w '%{http_code}' "$url" || true)
+            # Invoke-WebRequest follows this redemption redirect on Windows;
+            # curl needs --location or it stops at 302 after consuming the token.
+            status=$(curl -sS --location --noproxy '*' -c "$cookieJar" -b "$cookieJar" -o "$shellHtml" -w '%{http_code}' "$url" || true)
             [ "$status" = 200 ] && { shellReady=1; break; }
             sleep 1
           done
