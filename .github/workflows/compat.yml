@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: install development dependencies
+        run: npm install --ignore-scripts
       - name: syntax check every module
         run: |
           set -e

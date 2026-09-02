@@ -29,6 +29,9 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
+      - name: install development dependencies
+        run: npm install --ignore-scripts
+
       - name: tag matches package.json version
         shell: bash
         run: |
@@ -51,8 +54,7 @@ jobs:
             echo "::error::lib/shared.js VERSION does not match tag ${tag}"
             exit 1
           }
-          # no dependencies to install; this suite is what caught the fabricated
-          # delta column the compat boot-check structurally cannot reach
+          # This suite catches payload-level regressions the boot check cannot reach.
           npm test
           npm run docs:check
           npm pack --dry-run
