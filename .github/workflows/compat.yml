@@ -287,6 +287,24 @@ jobs:
             sleep 1
           done
           [ "$ready" = 1 ] || { echo '::error::dsh web did not become ready'; cat /tmp/dsh-web-out.log /tmp/dsh-web-err.log; exit 1; }
+
+          # Alpha gates mutating /api/* routes behind a one-shot launch token.
+          # Redeem the URL announced in the host log and retain its cookie;
+          # latest currently needs neither, so the same flow is harmless there.
+          cookieJar="$RUNNER_TEMP/dsh.cookies"
+          shellHtml="$RUNNER_TEMP/dsh-shell.html"
+          shellReady=0
+          announced=0
+          for i in $(seq 15); do
+            token=$(sed -n 's/.*[?&]token=\([^&[:space:]]*\).*/\1/p' /tmp/dsh-web-out.log /tmp/dsh-web-err.log | tail -n 1)
+            url='http://127.0.0.1:3131/'
+            if [ -n "$token" ]; then url="${url}?token=${token}"; announced=1; fi
+            status=$(curl -sS --noproxy '*' -c "$cookieJar" -b "$cookieJar" -o "$shellHtml" -w '%{http_code}' "$url" || true)
+            [ "$status" = 200 ] && { shellReady=1; break; }
+            sleep 1
+          done
+          [ "$shellReady" = 1 ] || { echo "::error::web shell never answered 200 (launch token announced: $announced)"; cat /tmp/dsh-web-out.log /tmp/dsh-web-err.log; exit 1; }
+
           base='http://127.0.0.1:3131/dsh-ballast/api'
           [ "$(code "$base?action=sessions")" = 200 ] || { echo '::error::sessions failed'; exit 1; }
           [ "$(code -H 'sec-fetch-site: cross-site' "$base?action=sessions")" = 403 ] || { echo '::error::cross-site guard regression'; exit 1; }
@@ -296,13 +314,18 @@ jobs:
           [ "$(code "$base?action=measure&sessionId=nope")" = 404 ] || { echo '::error::unknown session must be 404'; exit 1; }
           [ "$(code "$base?action=not-real")" = 400 ] || { echo '::error::unknown action must be 400'; exit 1; }
           created=''
+          refused=''
           for endpoint in session.create session/create; do
             body=$(printf '%s' '{"type":"client-request","rpcId":"dsh-ballast-boot-check","method":"'"$endpoint"'","payload":{"args":{"request":{}}}}')
-            response=$(curl -s --noproxy '*' -X POST -H 'content-type: application/json' --max-time 60 "http://127.0.0.1:3131/api/$endpoint" --data "$body" || true)
+            responseFile="$RUNNER_TEMP/create-response.json"
+            : > "$responseFile"
+            status=$(curl -sS --noproxy '*' -b "$cookieJar" -c "$cookieJar" -o "$responseFile" -w '%{http_code}' -X POST -H 'content-type: application/json' --max-time 60 "http://127.0.0.1:3131/api/$endpoint" --data "$body" || true)
+            response=$(cat "$responseFile" 2>/dev/null || true)
             created=$(printf '%s' "$response" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{let v=JSON.parse(s).result;if(v&&v.ok)process.stdout.write(v.value.sessionId||'')}catch{}})")
             [ -n "$created" ] && break
+            refused="/api/$endpoint -> HTTP $status: $response"
           done
-          [ -n "$created" ] || { echo '::error::neither session-create endpoint answered'; exit 1; }
+          [ -n "$created" ] || { echo "::error::neither session-create endpoint answered ($refused)"; exit 1; }
           listed=0
           for i in $(seq 20); do
             sessions=$(curl -s --noproxy '*' --max-time 20 "$base?action=sessions")
