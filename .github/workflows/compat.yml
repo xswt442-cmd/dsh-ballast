@@ -19,8 +19,8 @@ jobs:
     name: static checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
       - name: install development dependencies
@@ -61,8 +61,8 @@ jobs:
         # would only ever verify latest and leave the claim untested.
         dsh-spec: ['@alpha', '@latest']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
       - name: install DSH
