@@ -11,6 +11,8 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 - When the service runs on HTTP default port 80, same-origin Origins omitting the port (e.g. `http://127.0.0.1`) are no longer misjudged as cross-origin.
 - A whole panel refresh runs under one generation stamp: a selection or view change made while the session-list request is in flight is no longer overwritten by the stale response.
 - Failed measure/top requests (DSH restart, HMR socket drop, network error) now surface as an in-panel error instead of an unhandled promise rejection.
+- The refresh spinner belongs to the refresh that started it: after closing and reopening the panel, the previous refresh's late response no longer re-enables the button while the newer read is still in flight.
+- Unmounting the panel (HMR or plugin dispose) invalidates in-flight reads instead of leaving them holding the component's setState.
 - A Dock item with a missing or blank `label` falls back to `id` instead of rendering `aria-label="undefined"`.
 
 ## 0.2.5 - 2026-09-03

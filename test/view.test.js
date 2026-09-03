@@ -34,7 +34,8 @@ const REFRESH_SRC = region(PANEL_SRC, 'const refresh =', 'React.useEffect(')
 
 const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
   'timeLabel', 'baselineLabel', 'shadowBadge',
-  'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge']
+  'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge',
+  'releaseLoading']
 
 const view = new Function(`${VIEW_SRC}
 return { ${HELPERS.join(', ')} }`)()
@@ -256,8 +257,49 @@ test('a refresh runs under one generation and honours the newest target', () => 
   assert.match(REFRESH_SRC, /stateRef\.current/, 'refresh must read the newest selection and view')
   assert.match(REFRESH_SRC, /\}, \[loadMeasure, loadTop\]\)/,
     'refresh no longer depends on the captured selection or view')
-  // `loading` disables the refresh button, so a superseded refresh that returns
-  // without clearing it disables the button for good.
-  const superseded = REFRESH_SRC.slice(REFRESH_SRC.indexOf('if (gen !== generation.current)'))
-  assert.match(superseded, /loading: false/, 'a superseded refresh must still clear loading')
+  // `loading` disables the refresh button, so it has to be released — but only
+  // by the refresh that owns it. Closing and reopening the panel starts a
+  // second refresh; the first one returning late must not hand back a spinner
+  // the newer read is still holding (REVIEW-0904 P2).
+  assert.match(REFRESH_SRC, /loadingOwner\.current = gen/, 'a refresh takes ownership of the spinner')
+  assert.ok(!/loading: false/.test(REFRESH_SRC),
+    'refresh must not clear loading inline; ownership decides who may')
+  assert.match(REFRESH_SRC, /releaseLoading\(loadingOwner, gen\)/,
+    'every exit path releases loading through the ownership gate')
+})
+
+test('a refresh releases the spinner only while it owns it', () => {
+  // A superseded refresh used to clear `loading` unconditionally, so a stale
+  // read re-enabled the button while a newer one was still in flight.
+  const owner = { current: 7 }
+  assert.deepEqual(view.releaseLoading(owner, 7), { loading: false })
+  assert.equal(owner.current, 0, 'releasing hands ownership back')
+
+  const takenOver = { current: 8 }
+  assert.equal(view.releaseLoading(takenOver, 7), null,
+    'a refresh that lost ownership must not clear the spinner')
+  assert.equal(takenOver.current, 8, 'the newer refresh keeps ownership')
+
+  assert.equal(view.releaseLoading(null, 7), null)
+})
+
+test('unmounting the panel invalidates reads that are still in flight', () => {
+  // HMR or plugin dispose removes the slot while fetches are pending: those
+  // closures hold setState for a component that is gone. Bumping the
+  // generation makes every pending read stale at its own guard (REVIEW-0904 P3).
+  const cleanup = PANEL_SRC.slice(PANEL_SRC.indexOf('return () => {'))
+  assert.match(cleanup, /generation\.current \+= 1/, 'cleanup must invalidate pending reads')
+  assert.match(cleanup, /loadingOwner\.current = 0/, 'cleanup must drop the spinner owner')
+  // Invalidation alone is not enough: a stale read that settles after unmount
+  // must return *before* scheduling a state update on the gone component, not
+  // call setState with an empty patch. The refresh catch branch and the
+  // superseded branch each compute ownership first and bail out when there is
+  // nothing left to write.
+  const catchBranch = REFRESH_SRC.slice(REFRESH_SRC.indexOf('const released = releaseLoading'),
+    REFRESH_SRC.indexOf('if (gen !== generation.current) {'))
+  assert.match(catchBranch, /if \(!released && gen !== generation\.current\) return/,
+    'the catch branch must return without setState once the read is dead')
+  const superseded = REFRESH_SRC.slice(REFRESH_SRC.indexOf('if (gen !== generation.current) {'))
+  assert.match(superseded, /const released = releaseLoading\(loadingOwner, gen\)/)
+  assert.match(superseded, /if \(released\) setState/, 'a superseded read only touches state while it still owns the spinner')
 })
