@@ -24,6 +24,14 @@ function region(src, from, to) {
 const VIEW_SRC = region(CLIENT_SRC, VIEW_MARK, PANEL_MARK)
 const PANEL_SRC = region(CLIENT_SRC, PANEL_MARK, PLUGIN_MARK)
 
+// The read paths are async and stateful, so unlike the view helpers they cannot
+// be evaluated without React and a network. They are still where the panel gets
+// its wrong-data-on-screen bugs, so the structure that keeps them honest is
+// pinned here.
+const LOAD_MEASURE_SRC = region(PANEL_SRC, 'const loadMeasure =', 'const loadTop =')
+const LOAD_TOP_SRC = region(PANEL_SRC, 'const loadTop =', 'const refresh =')
+const REFRESH_SRC = region(PANEL_SRC, 'const refresh =', 'React.useEffect(')
+
 const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
   'timeLabel', 'baselineLabel', 'shadowBadge',
   'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge']
@@ -207,4 +215,49 @@ test('the panel surfaces the aggregate and the cross-session result', () => {
     'entry.rows', 'group.share']) {
     assert.ok(PANEL_SRC.includes(field), `panel never reads ${field}`)
   }
+})
+
+test('every read owns its network failure instead of raising it into the page', () => {
+  // Only res.json() was guarded before. A rejected fetch() — DSH restarting,
+  // HMR dropping the socket — became a browser unhandled rejection, and the
+  // panel went on showing the previous snapshot as if the read had worked.
+  for (const [name, src] of [['loadMeasure', LOAD_MEASURE_SRC], ['loadTop', LOAD_TOP_SRC]]) {
+    assert.match(src, /try \{[\s\S]*?await fetch\(/, `${name} must call fetch inside a try`)
+    const caught = src.slice(src.indexOf('} catch'))
+    assert.ok(caught.length > 0, `${name} never catches its fetch`)
+    assert.match(caught, /gen !== generation\.current/,
+      `${name} must not report a read the panel has already moved past`)
+    assert.match(caught, /setState\(/, `${name} must put the failure on screen`)
+  }
+})
+
+test('a queued read is either awaited or explicitly fire-and-forget', () => {
+  // An unmarked call reads as an oversight; `void` is what says the handler is
+  // done once the read is queued and the loader owns its own errors.
+  const callSites = PANEL_SRC.replace(/const (loadMeasure|loadTop|refresh) = React\.useCallback/g, '')
+  const found = [...callSites.matchAll(/(\S+\s+)?\b(loadMeasure|loadTop|refresh)\(/g)]
+  assert.ok(found.length >= 5, 'the panel should have call sites for all three reads')
+  for (const match of found) {
+    const lead = (match[1] || '').trim()
+    assert.ok(lead === 'void' || lead === 'await',
+      `${match[2]}() must be awaited or marked void, got "${match[0].trim()}"`)
+  }
+})
+
+test('a refresh runs under one generation and honours the newest target', () => {
+  // The sessions read is only half a refresh; the measurement that follows it
+  // belongs to the same intent, so one stamp covers both.
+  assert.match(REFRESH_SRC, /const gen = \+\+generation\.current/, 'refresh must stamp a generation')
+  assert.match(REFRESH_SRC, /gen !== generation\.current/, 'refresh must drop a superseded answer')
+  // Reading the captured state was the bug: a session picked while the read was
+  // in flight got overwritten by the selection the closure started with.
+  assert.ok(!/state\.selected/.test(REFRESH_SRC), 'refresh must not trust the captured selection')
+  assert.ok(!/state\.view/.test(REFRESH_SRC), 'refresh must not trust the captured view')
+  assert.match(REFRESH_SRC, /stateRef\.current/, 'refresh must read the newest selection and view')
+  assert.match(REFRESH_SRC, /\}, \[loadMeasure, loadTop\]\)/,
+    'refresh no longer depends on the captured selection or view')
+  // `loading` disables the refresh button, so a superseded refresh that returns
+  // without clearing it disables the button for good.
+  const superseded = REFRESH_SRC.slice(REFRESH_SRC.indexOf('if (gen !== generation.current)'))
+  assert.match(superseded, /loading: false/, 'a superseded refresh must still clear loading')
 })

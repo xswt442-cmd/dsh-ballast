@@ -3,6 +3,16 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## Unreleased
+
+### 修复
+
+- 请求守卫改用 TCP 对端地址判定本地性：非回环来源一律 403。此前伪造 `Host: 127.0.0.1` 即可通过守卫，而 DSH 支持监听 `0.0.0.0`。
+- 服务运行在 HTTP 默认端口 80 时，省略端口的同源 Origin（如 `http://127.0.0.1`）不再被误判为跨源。
+- 面板刷新整段流程使用同一 generation 戳：列表请求在途时的选择或视图切换不会被过期响应覆盖。
+- measure/top 请求失败（DSH 重启、HMR 断连、网络异常）现在落为面板内错误提示，不再产生未处理的 Promise 拒绝。
+- Dock 项 `label` 缺失或为空白时回退为 `id`，不再渲染出 `aria-label="undefined"`。
+
 ## 0.2.5 - 2026-09-03
 
 ### 变更

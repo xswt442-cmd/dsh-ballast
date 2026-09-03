@@ -5,11 +5,16 @@ import { VERSION } from '../lib/shared.js'
 
 const read = (relativePath) => fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8')
 
-test('both CHANGELOGs open with the version being shipped', () => {
+test('both CHANGELOGs contain the version being shipped', () => {
+  // Existence, not position: publish.yml starts collecting at the heading that
+  // matches PKG_VERSION, so an `## Unreleased` section above it is harmless.
+  // What actually breaks releases is no matching section at all -> empty notes.
   const heading = new RegExp(`^## ${VERSION.replace(/\./g, '\\.')}(\\s|$)`)
   for (const file of ['../CHANGELOG.md', '../CHANGELOG.en.md']) {
-    const first = read(file).split(/\r?\n/).find((line) => line.startsWith('## '))
-    assert.ok(first, `${file} has no version section`)
-    assert.match(first, heading, `${file} should open with ${VERSION}, got "${first}"`)
+    const sections = read(file).split(/\r?\n/).filter((line) => line.startsWith('## '))
+    assert.ok(
+      sections.some((line) => heading.test(line)),
+      `${file} has no ${VERSION} section; publish.yml would cut empty release notes`
+    )
   }
 })

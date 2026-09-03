@@ -43,7 +43,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 
 - 仅计量当前 host 的 live session，不读取已结束会话或其他 host 的会话。
 - 所有操作只读：不写状态、不删除消息、不触发 compaction，也不提供预算、费用表、压缩预测或正文导出。
-- API 校验 Fetch Metadata、`Origin` 和 loopback `Host`，拒绝跨站请求与 DNS rebinding；写方法统一返回 `405`。
+- API 只接受回环对端（按 socket 地址判断），并校验 Fetch Metadata、`Origin` 和 loopback `Host`，拒绝跨站请求与 DNS rebinding；即使 DSH Web 监听 `0.0.0.0`，远端请求也读不到会话数据。写方法统一返回 `405`。
 - 能连接 DSH Web 端口的本机进程仍在信任边界内，可读取会话标题、截断后的正文摘要及其原长度，以及会话列表中的进程元数据。
 - DSH 未注入 token meter、会话已结束或单次计量失败时返回明确错误；旧 host 缺少影子价时隐藏价差信息，但基础计量仍可用。
 

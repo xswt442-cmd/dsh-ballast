@@ -108,6 +108,9 @@ async function mount(nodes) {
   return {
     port,
     url: (query = '') => `http://127.0.0.1:${port}/dsh-ballast/api${query}`,
+    // The route object itself, for the one case a real socket cannot stage: a
+    // peer that is not on this machine.
+    route: () => routes.get('/dsh-ballast/api'),
     dispose: async () => {
       for (const fn of disposed) await fn()
       server.close()
@@ -156,6 +159,38 @@ test('the guard rejects cross-site, foreign origin and rebound host, admits loop
   assert.equal(open.body.sessions[0].sessionId, 'sess-http-1')
   assert.equal(open.body.sessions[0].title, 'dsh-ballast')
   assert.equal(open.body.sessions[0].titleSource, 'cwd')
+})
+
+test('the mounted route rejects a remote peer, however local its headers look', async (t) => {
+  const host = await mount(SURFACE.nodes)
+  t.after(() => host.dispose())
+
+  // DSH's webserver supports listening on 0.0.0.0, and a remote client writes
+  // its own Host header, so the loopback Host check alone left sessions,
+  // measure and top readable off-machine. A real loopback socket cannot stage
+  // that peer; the route is driven directly instead.
+  for (const action of ['sessions', 'measure&sessionId=sess-http-1', 'top']) {
+    const chunks = []
+    let status = null
+    const res = {
+      writeHead(code) { status = code },
+      setHeader() { },
+      end(text) { if (text) chunks.push(text) }
+    }
+    await host.route().handler({
+      method: 'GET',
+      url: `/dsh-ballast/api?action=${action}`,
+      headers: { host: `127.0.0.1:${host.port}`, origin: `http://127.0.0.1:${host.port}`, 'sec-fetch-site': 'same-origin' },
+      socket: { remoteAddress: '203.0.113.7' }
+    }, res)
+    assert.equal(status, 403, `action=${action} must not answer a remote peer`)
+    const body = JSON.parse(chunks.join(''))
+    assert.equal(body.code, 'non_loopback_peer')
+    // The rejection must not leak the data it refused to serve.
+    for (const field of ['sessions', 'measurement', 'availability', 'pid']) {
+      assert.ok(!(field in body), `the rejection leaks ${field}`)
+    }
+  }
 })
 
 test('the route is read-only in its method shape, not just its handlers', async (t) => {

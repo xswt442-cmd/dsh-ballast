@@ -43,7 +43,7 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 
 - Measures live sessions on the current host only; it does not read ended sessions or sessions on other hosts.
 - All operations are read-only: no state writes, message deletion, or compaction; there are no budgets, price tables, compaction forecasts, or content exports.
-- The API validates Fetch Metadata, `Origin`, and the loopback `Host`, rejecting cross-site requests and DNS rebinding; mutation-shaped methods return `405`.
+- The API accepts loopback peers only (by socket address) and validates Fetch Metadata, `Origin`, and the loopback `Host`, rejecting cross-site requests and DNS rebinding; remote requests cannot read session data even when DSH Web listens on `0.0.0.0`. Mutation-shaped methods return `405`.
 - A local process that can reach the DSH Web port remains inside the trust boundary and can read session titles, truncated previews and their original lengths, plus process metadata in the session list.
 - Missing host services, ended sessions, and per-session measurement failures return explicit errors. Older hosts without shadow prices retain basic measurement but hide price-difference data.
 
