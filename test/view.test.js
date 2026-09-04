@@ -37,7 +37,11 @@ const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
   'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge',
   'releaseLoading']
 
-const view = new Function(`${VIEW_SRC}
+// Keep copy assertions deterministic across developer machines and CI. Node 24
+// exposes navigator.language, so otherwise the evaluated browser fallback uses
+// the runner locale (en-US on GitHub, zh-CN on the maintainer machine).
+const view = new Function(`const navigator = { language: 'zh-CN' }
+${VIEW_SRC}
 return { ${HELPERS.join(', ')} }`)()
 
 test('the view region is presentation only, so evaluating it is fair', () => {
