@@ -56,10 +56,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # `latest` is what most installs get (0.1.1-rc.2 today); `alpha` is the
-        # line package.json actually claims. Installing a bare package name
-        # would only ever verify latest and leave the claim untested.
-        dsh-spec: ['@alpha', '@latest']
+        # Pin the declared compatibility line, the current prerelease, and the
+        # ordinary install channel independently: npm latest need not point at
+        # a prerelease, so it cannot stand in for the RC1 contract.
+        dsh-spec: ['@alpha', '@0.1.2-rc.1', '@latest']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -167,7 +167,7 @@ jobs:
             $auth = @{ WebSession = $session }
 
             $base = 'http://127.0.0.1:3131/dsh-ballast/api'
-            $sessions = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20
+            $sessions = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20 @auth
             if (-not $sessions.ok) { throw 'sessions returned an unexpected payload' }
 
             # The client artifact's address is not stable across the two lines:
@@ -184,8 +184,10 @@ jobs:
             if ($client.Content -notmatch [regex]::Escape("id: 'dsh-ballast'")) { throw 'the served bundle is not the dsh-ballast client' }
             Write-Host "client bundle advertised and served ($($client.Content.Length) bytes)"
 
+            $cookieHeader = ($session.Cookies.GetCookies([uri]'http://127.0.0.1:3131/') | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join '; '
+            $cookieArgs = if ($cookieHeader) { @('-H', "Cookie: $cookieHeader") } else { @() }
             function ApiCode([string]$method, [string]$url, [string[]]$curlArgs = @()) {
-              & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @curlArgs $url
+              & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @cookieArgs @curlArgs $url
             }
             if ((ApiCode GET "${base}?action=measure") -ne '400') { throw 'measure without sessionId must be 400' }
             if ((ApiCode GET "${base}?action=measure&sessionId=nope") -ne '404') { throw 'measure on unknown session must be 404' }
@@ -224,7 +226,7 @@ jobs:
 
             $listed = $null
             for ($i = 0; $i -lt 20; $i++) {
-              $after = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20
+              $after = Invoke-RestMethod -Uri "${base}?action=sessions" -TimeoutSec 20 @auth
               if ($after.availability -ne 'available') { throw "tokenMeter/sessions never became available: $($after.availability)" }
               $listed = @($after.sessions | Where-Object { $_.sessionId -eq $sessionId })
               if ($listed.Count -gt 0) { break }
@@ -234,7 +236,7 @@ jobs:
             if (-not $listed[0].title) { throw 'the session list must carry a display title' }
             if (-not $listed[0].titleSource) { throw 'the session list must say where the title came from' }
 
-            $measured = Invoke-RestMethod -Uri "${base}?action=measure&sessionId=$sessionId" -TimeoutSec 60
+            $measured = Invoke-RestMethod -Uri "${base}?action=measure&sessionId=$sessionId" -TimeoutSec 60 @auth
             if (-not $measured.ok) { throw "measure on a live session failed: $($measured | ConvertTo-Json -Compress -Depth 8)" }
             if ($measured.sessionId -ne $sessionId) { throw 'measure echoed a different sessionId' }
             $m = $measured.measurement
@@ -306,6 +308,7 @@ jobs:
             sleep 1
           done
           [ "$shellReady" = 1 ] || { echo "::error::web shell never answered 200 (launch token announced: $announced)"; cat /tmp/dsh-web-out.log /tmp/dsh-web-err.log; exit 1; }
+          code() { curl -s -o /dev/null -w '%{http_code}' --noproxy '*' -b "$cookieJar" "$@"; }
 
           base='http://127.0.0.1:3131/dsh-ballast/api'
           [ "$(code "$base?action=sessions")" = 200 ] || { echo '::error::sessions failed'; exit 1; }
@@ -330,13 +333,13 @@ jobs:
           [ -n "$created" ] || { echo "::error::neither session-create endpoint answered ($refused)"; exit 1; }
           listed=0
           for i in $(seq 20); do
-            sessions=$(curl -s --noproxy '*' --max-time 20 "$base?action=sessions")
+            sessions=$(curl -s --noproxy '*' -b "$cookieJar" --max-time 20 "$base?action=sessions")
             printf '%s' "$sessions" | grep -q '"availability":"available"' || { echo '::error::tokenMeter/sessions unavailable'; exit 1; }
             printf '%s' "$sessions" | grep -q "\"sessionId\":\"$created\"" && { listed=1; break; }
             sleep 1
           done
           [ "$listed" = 1 ] || { echo "::error::created session not measurable: $created"; exit 1; }
-          measured=$(curl -s --noproxy '*' --max-time 60 "$base?action=measure&sessionId=$created")
+          measured=$(curl -s --noproxy '*' -b "$cookieJar" --max-time 60 "$base?action=measure&sessionId=$created")
           printf '%s' "$measured" | grep -q '"ok":true' || { echo "::error::measure failed: $measured"; exit 1; }
           printf '%s' "$measured" | grep -q '"rows"' || { echo '::error::measurement missing rows'; exit 1; }
           echo 'compat check passed'

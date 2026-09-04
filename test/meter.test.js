@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { shapeMeasurement, createMeterBridge, resolveSessionTitle, summarizeTypes, workspaceBasename } from '../lib/meter.js'
+import {
+  shapeMeasurement,
+  createMeterBridge,
+  readProjectionOverview,
+  resolveSessionTitle,
+  summarizeTypes,
+  workspaceBasename
+} from '../lib/meter.js'
 
 // TokenMeasurement shape per deepseek-harness packages/llm/token-meter/src/types.ts
 const measurement = {
@@ -48,6 +55,34 @@ test('rows join seq back to the durable event type', () => {
   assert.equal(out.rows[0].type, 'tool/result')
   assert.equal(out.rows[1].type, 'assistant/message')
   assert.equal(out.rows[2].type, 'user/message')
+})
+
+test('RC1 Session readers never touch the removed events property', () => {
+  const events = [
+    { type: 'session/title', seq: 0, data: { title: 'RC1 title' } },
+    { type: 'user/message', seq: 1, time: '2026-09-04T01:00:00.000Z', data: { text: 'hello' } },
+    { type: 'tool/result', seq: 2, time: '2026-09-04T01:00:01.000Z', data: { text: 'done' } }
+  ]
+  let snapshots = 0
+  let pointReads = 0
+  const rc1Session = {
+    id: 'session-rc1',
+    header: { cwd: '/work/fallback' },
+    get seq() { return events.length },
+    eventAt(seq) { pointReads += 1; return events[seq] },
+    snapshotEvents() { snapshots += 1; return [...events] },
+    get events() { throw new Error('session.events was removed in DSH 0.1.2-rc.1') }
+  }
+
+  assert.deepEqual(resolveSessionTitle(rc1Session), { title: 'RC1 title', titleSource: 'title' })
+  const out = shapeMeasurement({
+    ...measurement,
+    nodes: [{ seq: 1, tokens: 12, heuristicTokens: 12 }, { seq: 2, tokens: 20, heuristicTokens: 20 }]
+  }, rc1Session)
+  assert.equal(out.eventCount, 3)
+  assert.deepEqual(out.rows.map((row) => row.type), ['tool/result', 'user/message'])
+  assert.equal(pointReads, 2, 'row joins should use eventAt rather than indexing a copied log')
+  assert.ok(snapshots >= 2, 'title/tool-name derivations need stable snapshots')
 })
 
 test('rows tolerate missing events (seq beyond the log)', () => {
@@ -218,6 +253,40 @@ test('the measure payload carries the display title next to the measurement', ()
   const result = createMeterBridge(ctx).measure('session-1')
   assert.equal(result.title, 'demo-project')
   assert.equal(result.titleSource, 'cwd')
+})
+
+test('the bridge exposes optional RC1 projection values without mixing their accounting bases', () => {
+  const projectionValues = {
+    tokenUsage: { uncachedInputTokens: 100, outputTokens: 20, cacheReadTokens: 300, cacheWriteTokens: 40 },
+    contextPressure: { pressureTokens: 400, projectedTokens: 455, contextWindow: 128000 },
+    contextBreakdown: { systemTokens: 10, toolsTokens: 50, messageTokens: 320 }
+  }
+  const ctx = makeFenceCtx({
+    ...fenceServices,
+    sessionProjections: {
+      snapshot(target) {
+        assert.equal(target, liveSession)
+        return { values: projectionValues }
+      }
+    }
+  })
+  const result = createMeterBridge(ctx).measure('session-1')
+  assert.deepEqual(result.projections, projectionValues)
+})
+
+test('missing or malformed optional projections degrade to null', () => {
+  assert.equal(readProjectionOverview(null, liveSession), null)
+  assert.equal(readProjectionOverview({ snapshot: () => { throw new Error('not mounted') } }, liveSession), null)
+  assert.deepEqual(
+    readProjectionOverview({ snapshot: () => ({
+      values: {
+        tokenUsage: { uncachedInputTokens: -1 },
+        contextPressure: { contextWindow: 0, projectedTokens: 12 },
+        contextBreakdown: { systemTokens: 1, toolsTokens: '2', messageTokens: 3 }
+      }
+    }) }, liveSession),
+    { tokenUsage: null, contextPressure: { projectedTokens: 12 }, contextBreakdown: null }
+  )
 })
 
 test('listSessions is heaviest-first and carries a display title', () => {

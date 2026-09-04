@@ -14,7 +14,8 @@ test('the dock entry is registered the way the protocol requires', () => {
   assert.ok(call, 'client.js never calls dock.register()')
   const registration = call[0]
   assert.match(registration, /\bid:\s*'ballast'/)
-  assert.match(registration, /\blabel:\s*'ballast'/)
+  assert.match(registration, /\blabel:\s*tr\('dock\.label'\)/,
+    'the dock label should follow the active DSH locale')
   assert.match(registration, /\bonActivate:\s*\(\)\s*=>/)
   assert.match(registration, /\bonDeactivate:\s*\(\)\s*=>/)
   assert.match(registration, /\border:\s*\d+/)

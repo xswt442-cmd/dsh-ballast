@@ -5,8 +5,17 @@ Release notes 由对应版本段生成；最新版本在前。
 
 ## Unreleased
 
+### 变更
+
+- 适配 DSH 0.1.2-rc.1 的 Session 读取 API，并保留 0.1.2-alpha.2 的兼容回退。
+- 增加 provider usage、context pressure 与 system/tools/messages 构成总览；projection 缺失时安全降级。
+- 接入 DSH 全局 locale，面板、Dock 与可访问名称随语言切换。
+- 兼容 CI 显式覆盖 `@deepseek-ai/dsh@0.1.2-rc.1`。
+
 ### 修复
 
+- RC1 不再因公开 `session.events` 被移除而丢失标题、事件数和逐条事件元数据。
+- RC1 浏览器请求复用 Connection 的签名 cookie 认证；认证拒绝不会回退旧守卫。
 - 请求守卫改用 TCP 对端地址判定本地性：非回环来源一律 403。此前伪造 `Host: 127.0.0.1` 即可通过守卫，而 DSH 支持监听 `0.0.0.0`。
 - 服务运行在 HTTP 默认端口 80 时，省略端口的同源 Origin（如 `http://127.0.0.1`）不再被误判为跨源。
 - 面板刷新整段流程使用同一 generation 戳：列表请求在途时的选择或视图切换不会被过期响应覆盖。

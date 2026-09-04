@@ -49,7 +49,7 @@ function brokenSession() {
  *   Pass pre-0.1.2-alpha.2 shaped nodes (no heuristicTokens) to probe the
  *   degraded host.
  */
-async function mount(nodes) {
+async function mount(nodes, { connection } = {}) {
   const session = fakeSession()
   const broken = brokenSession()
   const routes = new Map()
@@ -64,6 +64,7 @@ async function mount(nodes) {
     },
     inject(_names, cb) {
       cb({
+        connection,
         tokenMeter: {
           measure(target) {
             if (target === broken) throw new Error('step event seq mismatch')
@@ -118,6 +119,30 @@ async function mount(nodes) {
     }
   }
 }
+
+test('RC1 Connection rejection is final and never falls back to the legacy guard', async (t) => {
+  const host = await mount(SURFACE.nodes, {
+    connection: { requestRejection: () => 401 }
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=sessions'))
+  assert.equal(res.status, 401)
+  assert.equal(res.body.code, 'unauthorized')
+})
+
+test('RC1 Connection acceptance replaces the legacy loopback header fence', async (t) => {
+  let calls = 0
+  const host = await mount(SURFACE.nodes, {
+    connection: { requestRejection: () => { calls += 1; return undefined } }
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=sessions'), { origin: 'https://trusted.example' })
+  assert.equal(res.status, 200)
+  assert.equal(res.body.ok, true)
+  assert.equal(calls, 1)
+})
 
 /** Raw request so Host can be overridden — fetch() would normalise it away. */
 function send(url, headers = {}, method = 'GET') {

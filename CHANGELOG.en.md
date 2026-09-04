@@ -5,8 +5,17 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Unreleased
 
+### Changed
+
+- Adapt to the DSH 0.1.2-rc.1 Session read API while retaining the 0.1.2-alpha.2 compatibility fallback.
+- Add provider usage, context pressure, and system/tools/messages composition; missing projections degrade cleanly.
+- Integrate with the global DSH locale so the panel, Dock, and accessible labels follow language changes.
+- Explicitly cover `@deepseek-ai/dsh@0.1.2-rc.1` in compatibility CI.
+
 ### Fixed
 
+- RC1 no longer loses titles, event counts, and per-entry event metadata after removal of the public `session.events` field.
+- RC1 browser requests reuse Connection's signed-cookie authentication; an authentication rejection never falls back to the legacy guard.
 - The request guard now decides locality from the TCP peer address: non-loopback sources are rejected with 403. Previously a forged `Host: 127.0.0.1` passed the guard, while DSH supports listening on `0.0.0.0`.
 - When the service runs on HTTP default port 80, same-origin Origins omitting the port (e.g. `http://127.0.0.1`) are no longer misjudged as cross-origin.
 - A whole panel refresh runs under one generation stamp: a selection or view change made while the session-list request is in flight is no longer overwritten by the stale response.
