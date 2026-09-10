@@ -81,10 +81,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # Pin the declared compatibility line, the current prerelease, and the
-        # ordinary install channel independently: npm latest need not point at
-        # a prerelease, so it cannot stand in for the RC1 contract.
-        dsh-spec: ['@alpha', '@0.1.2-rc.1', '@latest']
+        # Pin the declared compatibility line and the current release
+        # candidate independently from the moving latest install channel.
+        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.1', '@latest']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
