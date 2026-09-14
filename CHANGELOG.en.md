@@ -3,6 +3,19 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.2.7 - 2026-09-14
+
+### Security
+
+- The same-origin request guard now comes from a fragment shared through `dsh-mini-utility-dock`. The three plugins previously maintained one `createGuard` each, and the copies had drifted three times: all three rejected the IPv6 loopback `::1`; the three disagreed on which Host spellings count as loopback; and an unbracketed IPv6 Host (for example `::1:3080`, which RFC 7230 forbids) silently skipped the Host allowlist. One implementation now decides, and each plugin keeps only its own error codes and wording.
+- The IPv4-mapped IPv6 loopback (`::ffff:127.0.0.1`, and `::ffff:7f00:1` after the URL parser normalises it) counts as loopback on both the Host and the Origin path. This plugin previously rejected that form while DSH Instance Manager admitted it.
+- A Host header that is present but parses to no hostname is treated as non-loopback. That case previously skipped the allowlist.
+- The decision of what counts as loopback is no longer held by this plugin: it comes from a generated fragment, and cross-repo consistency is checked by `scripts/guard-parity.mjs`, which compares both fragments byte for byte, verifies no private implementation sits beside them, and asserts the three plugins reach the same answer for every decision.
+
+### Changed
+
+- The Origin port is now read per request from the server's current port instead of being captured when the guard is built.
+
 ## 0.2.6 - 2026-09-04
 
 ### Changed
