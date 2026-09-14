@@ -26,6 +26,12 @@ individual messages through the host-only token meter.
   `npm run loopback:sync` / `npm run guard:sync` (either maintains both blocks),
   never the blocks themselves. The guard block depends on the loopback block, so
   keep that order.
+- `npm test` verifies both blocks against the dock version this repo pins
+  (`loopback:check` / `guard:check`). That is what makes the three plugins hold
+  identical blocks, so keep the pin exact and in step with the sibling repos.
+- `scripts/guard-parity.mjs` is a local diagnostic, not a CI gate. Run it with
+  `DSH_PLUGINS_ROOT` when all three checkouts share a branch; the property it
+  asserts cannot hold while a peer sits on a different branch.
 - Keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.
 
 ## Verify
