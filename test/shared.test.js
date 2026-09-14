@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { VERSION, createGuard, isLoopbackAddress, optionalSessionId } from '../lib/shared.js'
+import {
+  VERSION, createGuard, isLoopbackAddress, isLoopbackName, hostHostname, optionalSessionId
+} from '../lib/shared.js'
 import { readFileSync } from 'node:fs'
 
 test('VERSION matches package.json', () => {
@@ -123,6 +125,42 @@ test('guard admits only exact loopback hosts and matching Origins', () => {
     assert.equal(guard(mockReq(headers), res), false)
     assert.equal(res.statusCode, 403)
   }
+})
+
+// Regression: the three plugins used to disagree on the IPv4-mapped IPv6 form.
+// Ballast rejected `[::ffff:127.0.0.1]:3080` while instance-manager accepted it,
+// which is exactly the drift scripts/guard-parity.mjs exists to catch. The form
+// is loopback and must be admitted in both spellings — a dual-stack browser
+// reaches the panel that way, and the WHATWG URL parser rewrites the dotted form
+// to hex in an Origin.
+test('guard treats the IPv4-mapped IPv6 loopback form as loopback', () => {
+  const guard = createGuard({ currentPort: () => 3080 })
+  for (const host of ['[::ffff:127.0.0.1]:3080', '[::ffff:7f00:1]:3080']) {
+    assert.equal(guard(mockReq({ host, 'sec-fetch-site': 'same-origin' }), mockRes()), true, `${host} is loopback`)
+    assert.equal(isLoopbackName(hostHostname(host)), true, `${host} parses to a loopback name`)
+  }
+  // ...but the mapped form must not become a way past the 127/8 test.
+  for (const host of ['[::ffff:8.8.8.8]:3080', '[::ffff:203.0.113.7]:3080']) {
+    const res = mockRes()
+    assert.equal(guard(mockReq({ host, 'sec-fetch-site': 'same-origin' }), res), false, `${host} is not loopback`)
+    assert.equal(res.statusCode, 403)
+  }
+})
+
+// Regression: an empty hostname parse must fail closed. `hostHostname` splits an
+// unbracketed IPv6 literal at the first colon and returns '', and a bare
+// truthiness test would skip the allowlist entirely. RFC 7230 forbids the form
+// but a client can still send it, so it is denied rather than waved through.
+test('guard fails closed on a Host header that parses to no hostname', () => {
+  const guard = createGuard({ currentPort: () => 3080 })
+  for (const host of ['::1:3080', '::ffff:127.0.0.1:3080']) {
+    const res = mockRes()
+    assert.equal(guard(mockReq({ host, 'sec-fetch-site': 'same-origin' }), res), false, `${host} is not a usable Host`)
+    assert.equal(res.statusCode, 403)
+    assert.equal(JSON.parse(res.body).code, 'non_loopback')
+  }
+  // An ABSENT Host is still a pass: a host-side caller carries no Host header.
+  assert.equal(guard(mockReq({ 'sec-fetch-site': 'same-origin' }), mockRes()), true)
 })
 
 test('an Origin on a default port matches the port the server runs on', () => {

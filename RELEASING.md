@@ -9,7 +9,17 @@ commit into `main`. Only release-ready changes belong on `main`.
    - `package.json#version`
    - `lib/shared.js#VERSION`
    - the first section of both changelogs: `## X.Y.Z - YYYY-MM-DD`
-2. Run:
+2. Make sure the embedded fragments match their canonical sources in
+   `dsh-mini-utility-dock` (the dock bootstrap in `lib/client.js`, the loopback
+   predicates in `lib/shared.js`). `npm test` fails if either has drifted, and
+   `npm run loopback:sync` / `npm run dock:sync` rewrites them:
+
+   ```sh
+   npm run loopback:sync
+   npm run dock:sync
+   ```
+
+3. Run:
 
    ```sh
    npm test
@@ -19,9 +29,9 @@ commit into `main`. Only release-ready changes belong on `main`.
    npm pack --dry-run
    ```
 
-3. Commit and push the development branch, then merge it into `main` after CI
+4. Commit and push the development branch, then merge it into `main` after CI
    passes.
-4. From the release commit on `main`, create and push the `vX.Y.Z` tag:
+5. From the release commit on `main`, create and push the `vX.Y.Z` tag:
 
    ```sh
    git tag vX.Y.Z
