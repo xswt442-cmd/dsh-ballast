@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  VERSION, createGuard, isLoopbackAddress, isLoopbackName, hostHostname, optionalSessionId
+  VERSION, ballastGuard, isLoopbackAddress, isLoopbackName, hostHostname, optionalSessionId
 } from '../lib/shared.js'
 import { readFileSync } from 'node:fs'
 
@@ -49,7 +49,7 @@ test('isLoopbackAddress admits loopback peers and fails closed otherwise', () =>
 })
 
 test('guard rejects a non-loopback peer whatever headers it sends', () => {
-  const guard = createGuard({ currentPort: () => 3080 })
+  const guard = ballastGuard({ currentPort: () => 3080 })
   // DSH can listen on 0.0.0.0, and a remote client writes its own Host. These
   // are the three shapes that used to read as local.
   for (const headers of [
@@ -65,7 +65,7 @@ test('guard rejects a non-loopback peer whatever headers it sends', () => {
 })
 
 test('guard fails closed when the peer address is missing', () => {
-  const guard = createGuard()
+  const guard = ballastGuard()
   for (const req of [{ headers: {} }, { headers: {}, socket: {} }, { headers: {}, socket: { remoteAddress: '' } }]) {
     const res = mockRes()
     assert.equal(guard(req, res), false, 'an unidentifiable peer is not a local peer')
@@ -74,14 +74,14 @@ test('guard fails closed when the peer address is missing', () => {
 })
 
 test('guard admits every loopback peer form Node reports', () => {
-  const guard = createGuard()
+  const guard = ballastGuard()
   for (const address of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
     assert.equal(guard(mockReq({}, address), mockRes()), true, `${address} is local`)
   }
 })
 
 test('guard rejects cross-site fetch metadata', () => {
-  const guard = createGuard()
+  const guard = ballastGuard()
   const res = mockRes()
   const ok = guard(mockReq({ 'sec-fetch-site': 'cross-site', host: '127.0.0.1:3080' }), res)
   assert.equal(ok, false)
@@ -90,7 +90,7 @@ test('guard rejects cross-site fetch metadata', () => {
 })
 
 test('guard rejects a foreign Origin', () => {
-  const guard = createGuard()
+  const guard = ballastGuard()
   const res = mockRes()
   const ok = guard(mockReq({ origin: 'https://evil.example', host: '127.0.0.1:3080' }), res)
   assert.equal(ok, false)
@@ -99,7 +99,7 @@ test('guard rejects a foreign Origin', () => {
 })
 
 test('guard rejects a non-loopback Host (DNS rebinding)', () => {
-  const guard = createGuard()
+  const guard = ballastGuard()
   const res = mockRes()
   const ok = guard(mockReq({ host: 'rebound.example' }), res)
   assert.equal(ok, false)
@@ -108,7 +108,7 @@ test('guard rejects a non-loopback Host (DNS rebinding)', () => {
 })
 
 test('guard admits only exact loopback hosts and matching Origins', () => {
-  const guard = createGuard({ currentPort: () => 3080 })
+  const guard = ballastGuard({ currentPort: () => 3080 })
   const accepted = [
     { host: 'localhost:3080', origin: 'http://localhost:3080' },
     { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' },
@@ -134,7 +134,7 @@ test('guard admits only exact loopback hosts and matching Origins', () => {
 // reaches the panel that way, and the WHATWG URL parser rewrites the dotted form
 // to hex in an Origin.
 test('guard treats the IPv4-mapped IPv6 loopback form as loopback', () => {
-  const guard = createGuard({ currentPort: () => 3080 })
+  const guard = ballastGuard({ currentPort: () => 3080 })
   for (const host of ['[::ffff:127.0.0.1]:3080', '[::ffff:7f00:1]:3080']) {
     assert.equal(guard(mockReq({ host, 'sec-fetch-site': 'same-origin' }), mockRes()), true, `${host} is loopback`)
     assert.equal(isLoopbackName(hostHostname(host)), true, `${host} parses to a loopback name`)
@@ -152,7 +152,7 @@ test('guard treats the IPv4-mapped IPv6 loopback form as loopback', () => {
 // truthiness test would skip the allowlist entirely. RFC 7230 forbids the form
 // but a client can still send it, so it is denied rather than waved through.
 test('guard fails closed on a Host header that parses to no hostname', () => {
-  const guard = createGuard({ currentPort: () => 3080 })
+  const guard = ballastGuard({ currentPort: () => 3080 })
   for (const host of ['::1:3080', '::ffff:127.0.0.1:3080']) {
     const res = mockRes()
     assert.equal(guard(mockReq({ host, 'sec-fetch-site': 'same-origin' }), res), false, `${host} is not a usable Host`)
@@ -166,22 +166,22 @@ test('guard fails closed on a Host header that parses to no hostname', () => {
 test('an Origin on a default port matches the port the server runs on', () => {
   // `new URL('http://127.0.0.1:80').port` is '', which compared unequal to "80"
   // and turned a legitimate same-origin request into a 403.
-  const onPort80 = createGuard({ currentPort: () => 80 })
+  const onPort80 = ballastGuard({ currentPort: () => 80 })
   assert.equal(onPort80(mockReq({ host: '127.0.0.1', origin: 'http://127.0.0.1' }), mockRes()), true)
   assert.equal(onPort80(mockReq({ host: '127.0.0.1:80', origin: 'http://127.0.0.1:80' }), mockRes()), true)
 
-  const onPort443 = createGuard({ currentPort: () => 443 })
+  const onPort443 = ballastGuard({ currentPort: () => 443 })
   assert.equal(onPort443(mockReq({ host: '127.0.0.1', origin: 'https://127.0.0.1' }), mockRes()), true)
 
   // The implied port is still a port: it must not match a server on another one.
-  const onPort3080 = createGuard({ currentPort: () => 3080 })
+  const onPort3080 = ballastGuard({ currentPort: () => 3080 })
   const res = mockRes()
   assert.equal(onPort3080(mockReq({ host: '127.0.0.1:3080', origin: 'http://127.0.0.1' }), res), false)
   assert.equal(JSON.parse(res.body).code, 'foreign_origin')
 })
 
 test('guard passes same-origin and host-side (headerless) callers', () => {
-  const guard = createGuard()
+  const guard = ballastGuard()
   assert.equal(guard(mockReq({ 'sec-fetch-site': 'same-origin', host: '127.0.0.1:3080' }), mockRes()), true)
   // plain node:http peer callers carry no fetch/origin/host headers
   assert.equal(guard(mockReq({}), mockRes()), true)

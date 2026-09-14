@@ -20,9 +20,9 @@ individual messages through the host-only token meter.
 - Preserve the host-only and read-only boundaries: do not fabricate token or
   pricing data, broaden API methods, or weaken same-origin guards.
 - Keep `package.json#version` and `lib/shared.js#VERSION` equal.
-- The marked `dsh-loopback-helpers` block in `lib/shared.js` is generated from
-  `dsh-mini-utility-dock/dist/loopback.js`; edit the dock fragment and run
-  `npm run loopback:sync`, never the block itself.
+- The marked `dsh-host-guard` block in `lib/shared.js` is generated from
+  `dsh-mini-utility-dock/dist/guard.js`; edit the dock fragment and run
+  `npm run guard:sync`, never the block itself.
 - Keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.
 
 ## Verify
