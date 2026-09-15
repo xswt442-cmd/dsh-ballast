@@ -28,7 +28,6 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 - Adapt to the DSH 0.1.2-rc.1 Session read API while retaining the 0.1.2-alpha.2 compatibility fallback.
 - Add provider usage, context pressure, and system/tools/messages composition; missing projections degrade cleanly.
 - Integrate with the global DSH locale so the panel, Dock, and accessible labels follow language changes.
-- Explicitly cover `@deepseek-ai/dsh@0.1.2-rc.1` in compatibility CI.
 
 ### Fixed
 
@@ -44,19 +43,11 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.2.5 - 2026-09-03
 
-### Changed
-
-- Host cleanup now follows the Cordis effect lifecycle; compatibility CI covers DSH latest/alpha on Windows and Ubuntu.
-
 ### Fixed
 
 - Tightened the local HTTP guard to exact loopback hosts and Origins on the active Web port, with correct IPv6 `[::1]` support.
 
 ## 0.2.4 - 2026-09-02
-
-### Changed
-
-- The Mini Utility Dock is now synchronized at build time from `dsh-mini-utility-dock`, which owns the protocol tests.
 
 ### Fixed
 
@@ -64,10 +55,9 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.2.3 - 2026-09-02
 
-### Changed
+### Maintenance
 
-- Simplified and aligned the bilingual READMEs, repository guidance, release instructions, and package metadata.
-- Added bilingual documentation drift checks, version lockstep tests, and changelog-driven idempotent releases.
+- No user-visible functional or behavioural change.
 
 ## 0.2.2 - 2026-09-01
 
@@ -83,9 +73,9 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.2.1 - 2026-09-01
 
-### Changed
+### Maintenance
 
-- npm publishing now uses the package name and Trusted Publishing; release checks and GitHub Releases can be retried independently.
+- No user-visible functional or behavioural change.
 
 ## 0.2.0 - 2026-08-31
 

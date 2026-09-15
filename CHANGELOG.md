@@ -28,7 +28,6 @@ Release notes 由对应版本段生成；最新版本在前。
 - 适配 DSH 0.1.2-rc.1 的 Session 读取 API，并保留 0.1.2-alpha.2 的兼容回退。
 - 增加 provider usage、context pressure 与 system/tools/messages 构成总览；projection 缺失时安全降级。
 - 接入 DSH 全局 locale，面板、Dock 与可访问名称随语言切换。
-- 兼容 CI 显式覆盖 `@deepseek-ai/dsh@0.1.2-rc.1`。
 
 ### 修复
 
@@ -44,19 +43,11 @@ Release notes 由对应版本段生成；最新版本在前。
 
 ## 0.2.5 - 2026-09-03
 
-### 变更
-
-- Host 清理改用 Cordis effect 生命周期；兼容 CI 覆盖 Windows 与 Ubuntu 的 DSH latest/alpha。
-
 ### 修复
 
 - 收紧本地 HTTP 守卫：只接受精确回环主机、匹配当前 Web 端口的 Origin，并正确支持 IPv6 `[::1]`。
 
 ## 0.2.4 - 2026-09-02
-
-### 变更
-
-- Mini Utility Dock 改由 `dsh-mini-utility-dock` 在构建时同步，协议测试归入公共包。
 
 ### 修复
 
@@ -64,10 +55,9 @@ Release notes 由对应版本段生成；最新版本在前。
 
 ## 0.2.3 - 2026-09-02
 
-### 变更
+### 维护
 
-- 精简并对齐双语 README、仓库指南、发布说明与 package 元数据。
-- 增加双语文档漂移检查、版本锁步测试和基于 changelog 的幂等发布流程。
+- 本版没有用户可见的功能或行为变化。
 
 ## 0.2.2 - 2026-09-01
 
@@ -83,9 +73,9 @@ Release notes 由对应版本段生成；最新版本在前。
 
 ## 0.2.1 - 2026-09-01
 
-### 变更
+### 维护
 
-- npm 发布使用包名与 Trusted Publishing；发布检查与 GitHub Release 可独立重试。
+- 本版没有用户可见的功能或行为变化。
 
 ## 0.2.0 - 2026-08-31
 
