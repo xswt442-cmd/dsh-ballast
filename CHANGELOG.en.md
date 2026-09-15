@@ -7,22 +7,19 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Changed
 
-- CI no longer runs the cross-repo `guard-parity` job. The shared fragments are verified locally by this repo's `npm test` (`loopback:check` / `guard:check`) against the dock version it pins: dock versions are immutable once published and consumers pin an exact version, so "all three pin the same version" already implies "all three hold byte-identical blocks", making the cross-repo comparison redundant.
-- `scripts/guard-parity.mjs` becomes a manual diagnostic rather than a CI gate. It now asserts that the three repos pin the same dock version and reach the same conclusion on every decision. `AGENTS.md` records why it is not a gate: a peer checkout resolves to the default branch, so the property it asserts does not hold there and it reports false failures.
-- The LICENSE copyright holder is now `xswt442-cmd`.
+- No user-visible functional or behavioural change: this release is repository maintenance only, and the LICENSE copyright holder is now `xswt442-cmd`.
 
 ## 0.2.7 - 2026-09-14
 
 ### Security
 
-- The same-origin request guard now comes from a fragment shared through `dsh-mini-utility-dock`. The three plugins previously maintained one `createGuard` each, and the copies had drifted three times: all three rejected the IPv6 loopback `::1`; the three disagreed on which Host spellings count as loopback; and an unbracketed IPv6 Host (for example `::1:3080`, which RFC 7230 forbids) silently skipped the Host allowlist. One implementation now decides, and each plugin keeps only its own error codes and wording.
-- The IPv4-mapped IPv6 loopback (`::ffff:127.0.0.1`, and `::ffff:7f00:1` after the URL parser normalises it) counts as loopback on both the Host and the Origin path. This plugin previously rejected that form while DSH Instance Manager admitted it.
-- A Host header that is present but parses to no hostname is treated as non-loopback. That case previously skipped the allowlist.
-- The decision of what counts as loopback is no longer held by this plugin: it comes from a generated fragment, and cross-repo consistency is checked by `scripts/guard-parity.mjs`, which compares both fragments byte for byte, verifies no private implementation sits beside them, and asserts the three plugins reach the same answer for every decision.
+- Fix a way to bypass the same-origin check: when a `Host` header is present but yields no hostname (for example an unbracketed IPv6 host such as `::1:3080`, which RFC 7230 does not allow), the allowlist was skipped entirely. Such requests are now rejected as non-loopback.
+- The IPv4-mapped IPv6 loopback (`[::ffff:127.0.0.1]`, and `[::ffff:7f00:1]` after the URL parser normalises it) counts as loopback on both the Host and the Origin path. This plugin previously rejected it on the Origin path.
 
-### Changed
+### Fixed
 
-- The Origin port is now read per request from the server's current port instead of being captured when the guard is built.
+- Reaching the plugin over the IPv6 loopback address `::1` no longer gets rejected.
+- The Origin port is now read per request from the server's current port instead of being captured when the guard is built, so a server that changes port no longer compares against a stale one.
 
 ## 0.2.6 - 2026-09-04
 
