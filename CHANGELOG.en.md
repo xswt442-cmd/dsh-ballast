@@ -7,7 +7,8 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Maintenance
 
-- No user-visible functional or behavioural change: this release is repository maintenance only, and the LICENSE copyright holder is now `xswt442-cmd`.
+- The shared-fragment CI check now runs in this repository (`loopback:check` / `guard:check`) instead of comparing across repositories.
+- The LICENSE copyright holder is now `xswt442-cmd`.
 
 ## 0.2.7 - 2026-09-14
 
@@ -57,7 +58,8 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Maintenance
 
-- No user-visible functional or behavioural change.
+- Add bilingual documentation drift checks and version lockstep tests; releases are driven by the changelog.
+- Align the bilingual READMEs, repository guidance, release instructions, and package metadata.
 
 ## 0.2.2 - 2026-09-01
 
@@ -75,7 +77,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Maintenance
 
-- No user-visible functional or behavioural change.
+- npm publishing now uses Trusted Publishing; release checks and GitHub Releases can be retried independently.
 
 ## 0.2.0 - 2026-08-31
 
