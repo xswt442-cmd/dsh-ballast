@@ -29,6 +29,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 - Adapt to the DSH 0.1.2-rc.1 Session read API while retaining the 0.1.2-alpha.2 compatibility fallback.
 - Add provider usage, context pressure, and system/tools/messages composition; missing projections degrade cleanly.
 - Integrate with the global DSH locale so the panel, Dock, and accessible labels follow language changes.
+- Compatibility CI covers `@deepseek-ai/dsh@0.1.2-rc.1`.
 
 ### Fixed
 
@@ -43,6 +44,10 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 - A Dock item with a missing or blank `label` falls back to `id` instead of rendering `aria-label="undefined"`.
 
 ## 0.2.5 - 2026-09-03
+
+### Changed
+
+- Compatibility CI covers DSH latest/alpha on Windows and Ubuntu.
 
 ### Fixed
 

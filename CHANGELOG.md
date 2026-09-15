@@ -29,6 +29,7 @@ Release notes 由对应版本段生成；最新版本在前。
 - 适配 DSH 0.1.2-rc.1 的 Session 读取 API，并保留 0.1.2-alpha.2 的兼容回退。
 - 增加 provider usage、context pressure 与 system/tools/messages 构成总览；projection 缺失时安全降级。
 - 接入 DSH 全局 locale，面板、Dock 与可访问名称随语言切换。
+- 兼容 CI 覆盖 `@deepseek-ai/dsh@0.1.2-rc.1`。
 
 ### 修复
 
@@ -43,6 +44,10 @@ Release notes 由对应版本段生成；最新版本在前。
 - Dock 项 `label` 缺失或为空白时回退为 `id`，不再渲染出 `aria-label="undefined"`。
 
 ## 0.2.5 - 2026-09-03
+
+### 变更
+
+- 兼容 CI 覆盖 Windows 与 Ubuntu 的 DSH latest/alpha。
 
 ### 修复
 
