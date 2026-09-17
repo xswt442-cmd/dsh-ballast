@@ -3,6 +3,13 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.2.9 - 2026-09-17
+
+### Changed
+
+- The session view's origin/estimated-mix block and its share-by-type legend are now collapsed disclosures. Both previously sat between the totals and the entry list, pushing the entries the panel exists to show below the first screen. The totals and the share bar remain visible by default.
+- The README header uses one consistent badge row: npm version, downloads, DSH compatibility range, Node version, license, and this plugin's read-only boundary.
+
 ## 0.2.8 - 2026-09-16
 
 ### Maintenance

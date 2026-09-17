@@ -1,5 +1,12 @@
 # dsh-ballast
 
+[![npm version](https://img.shields.io/npm/v/dsh-ballast?color=4d6bfe&label=npm)](https://www.npmjs.com/package/dsh-ballast)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-ballast?label=downloads)](https://www.npmjs.com/package/dsh-ballast)
+[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.2--alpha.2-4d6bfe)](https://github.com/deepseek-ai/deepseek-harness)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-5fa04e)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![read-only](https://img.shields.io/badge/read--only-no%20writes-6b7280)](./README.md)
+
 [中文](./README.md) | [English](./README.en.md)
 
 [![npm](https://img.shields.io/npm/v/dsh-ballast)](https://www.npmjs.com/package/dsh-ballast)
