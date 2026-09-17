@@ -3,12 +3,18 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.2.10 - 2026-09-17
+
+### Changed
+
+- The session panel is smaller overall: width 520 → 440, height cap 680/78vh → 460/62vh. It used to be far larger than its content, covering most of the screen for a handful of entries.
+
 ## 0.2.9 - 2026-09-17
 
 ### Changed
 
-- The session view's origin/estimated-mix block and its share-by-type legend are now collapsed disclosures. Both previously sat between the totals and the entry list, pushing the entries the panel exists to show below the first screen. The totals and the share bar remain visible by default.
-- The README header uses one consistent badge row: npm version, downloads, DSH compatibility range, Node version, license, and this plugin's read-only boundary.
+- The session view's origin/estimated-mix block and its share-by-type legend are collapsed disclosures now; the totals and the share bar stay visible. Both previously sat between the totals and the entry list, pushing the entries below the first screen.
+- The README header uses one consistent badge row.
 
 ## 0.2.8 - 2026-09-16
 

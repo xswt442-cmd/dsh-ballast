@@ -33,6 +33,7 @@ individual messages through the host-only token meter.
   `DSH_PLUGINS_ROOT` when all three checkouts share a branch; the property it
   asserts cannot hold while a peer sits on a different branch.
 - Keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.
+- CHANGELOG entries are one or two lines: what changed, and why it matters. No implementation narrative, incident timeline, or root-cause essay.
 
 ## Verify
 
