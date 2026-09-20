@@ -196,9 +196,16 @@ jobs:
             if ((ApiCode GET "${base}?action=measure") -ne '400') { throw 'measure without sessionId must be 400' }
             if ((ApiCode GET "${base}?action=measure&sessionId=nope") -ne '404') { throw 'measure on unknown session must be 404' }
             if ((ApiCode GET "${base}?action=not-real") -ne '400') { throw 'unknown action must be 400' }
-            if ((ApiCode GET "${base}?action=sessions" @('-H', 'sec-fetch-site: cross-site')) -ne '403') { throw 'guard regression: cross-site metadata must be 403' }
-            if ((ApiCode GET "${base}?action=sessions" @('-H', 'Origin: https://evil.example')) -ne '403') { throw 'guard regression: foreign Origin must be 403' }
-            if ((ApiCode GET "${base}?action=sessions" @('-H', 'Host: rebound.example')) -ne '403') { throw 'guard regression: non-loopback Host must be 403' }
+            # The three header checks below assert the DEPLOYED request fence, not this plugin's
+            # own embedded guard: a host that mounts the Connection service fences with its
+            # Host/Origin rule plus the signed browser cookie, and the embedded guard only
+            # runs where no Connection service is mounted. Keep them as end-to-end assertions
+            # of the boundary a caller actually reaches; the guard itself is covered by the
+            # unit tests (and, for the no-Connection route, by the route-level test).
+
+            if ((ApiCode GET "${base}?action=sessions" @('-H', 'sec-fetch-site: cross-site')) -ne '403') { throw 'the deployed API must reject a cross-site request (403)' }
+            if ((ApiCode GET "${base}?action=sessions" @('-H', 'Origin: https://evil.example')) -ne '403') { throw 'the deployed API must reject a foreign Origin (403)' }
+            if ((ApiCode GET "${base}?action=sessions" @('-H', 'Host: rebound.example')) -ne '403') { throw 'the deployed API must reject a rebound Host (403)' }
 
             # --- measure happy path (M1-5) ---
             # ctx.sessions only answers for live sessions, and a bare `dsh web`
@@ -316,9 +323,16 @@ jobs:
 
           base='http://127.0.0.1:3131/dsh-ballast/api'
           [ "$(code "$base?action=sessions")" = 200 ] || { echo '::error::sessions failed'; exit 1; }
-          [ "$(code -H 'sec-fetch-site: cross-site' "$base?action=sessions")" = 403 ] || { echo '::error::cross-site guard regression'; exit 1; }
-          [ "$(code -H 'Origin: https://evil.example' "$base?action=sessions")" = 403 ] || { echo '::error::foreign Origin guard regression'; exit 1; }
-          [ "$(code -H 'Host: evil.localhost' "$base?action=sessions")" = 403 ] || { echo '::error::localhost suffix guard regression'; exit 1; }
+          # The three header checks below assert the DEPLOYED request fence, not this plugin's
+          # own embedded guard: a host that mounts the Connection service fences with its
+          # Host/Origin rule plus the signed browser cookie, and the embedded guard only
+          # runs where no Connection service is mounted. Keep them as end-to-end assertions
+          # of the boundary a caller actually reaches; the guard itself is covered by the
+          # unit tests (and, for the no-Connection route, by the route-level test).
+
+          [ "$(code -H 'sec-fetch-site: cross-site' "$base?action=sessions")" = 403 ] || { echo '::error::the deployed API must reject a cross-site request'; exit 1; }
+          [ "$(code -H 'Origin: https://evil.example' "$base?action=sessions")" = 403 ] || { echo '::error::the deployed API must reject a foreign Origin'; exit 1; }
+          [ "$(code -H 'Host: evil.localhost' "$base?action=sessions")" = 403 ] || { echo '::error::the deployed API must reject a rebound Host'; exit 1; }
           [ "$(code "$base?action=measure")" = 400 ] || { echo '::error::measure without sessionId must be 400'; exit 1; }
           [ "$(code "$base?action=measure&sessionId=nope")" = 404 ] || { echo '::error::unknown session must be 404'; exit 1; }
           [ "$(code "$base?action=not-real")" = 400 ] || { echo '::error::unknown action must be 400'; exit 1; }
