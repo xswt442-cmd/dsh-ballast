@@ -49,8 +49,8 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 
 - Measures live sessions on the current host only; it does not read ended sessions or sessions on other hosts.
 - All operations are read-only: no state writes, message deletion, or compaction; there are no budgets, price tables, compaction forecasts, or content exports.
-- On DSH 0.1.2-rc.1 and newer, the API reuses Connection's Host/Origin checks and signed browser cookie; missing or invalid browser authentication returns `401/403`. Only older hosts fall back to the local TCP-peer, Fetch Metadata, `Origin`, and loopback-`Host` guard. Mutation-shaped methods return `405`.
-- In the older-host compatibility mode, a local process that can reach the DSH Web port remains inside the trust boundary; RC1+ requires a valid DSH browser session.
+- On DSH 0.1.0-rc.7 and newer, the API reuses Connection's Host/Origin checks and signed browser cookie; missing or invalid browser authentication returns `401/403`. Only a host that does not mount Connection falls back to the local TCP-peer, Fetch Metadata, `Origin`, and loopback-`Host` guard. Mutation-shaped methods return `405`.
+- In that fallback mode a local process that can reach the DSH Web port remains inside the trust boundary; with Connection, a valid DSH browser session is required.
 - Missing host services, ended sessions, and per-session measurement failures return explicit errors. Older hosts without shadow prices retain basic measurement but hide price-difference data.
 
 ## Platform and compatibility

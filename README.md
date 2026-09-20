@@ -49,8 +49,8 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 
 - 仅计量当前 host 的 live session，不读取已结束会话或其他 host 的会话。
 - 所有操作只读：不写状态、不删除消息、不触发 compaction，也不提供预算、费用表、压缩预测或正文导出。
-- 在 DSH 0.1.2-rc.1 及更高版本中，API 复用 Connection 的 Host/Origin 校验和浏览器签名 cookie；缺少或错误的浏览器认证返回 `401/403`。旧 host 才回退到按 TCP 对端、Fetch Metadata、`Origin` 和 loopback `Host` 判定的本地守卫。写方法统一返回 `405`。
-- 在旧 host 的兼容模式下，能连接 DSH Web 端口的本机进程仍在信任边界内；RC1+ 则要求有效的 DSH 浏览器会话。
+- 在 DSH 0.1.0-rc.7 及更高版本中，API 复用 Connection 的 Host/Origin 校验和浏览器签名 cookie；缺少或错误的浏览器认证返回 `401/403`。只有未挂载 Connection 的宿主才回退到按 TCP 对端、Fetch Metadata、`Origin` 和 loopback `Host` 判定的本地守卫。写方法统一返回 `405`。
+- 在回退模式下，能连接 DSH Web 端口的本机进程仍在信任边界内；有 Connection 时要求有效的 DSH 浏览器会话。
 - DSH 未注入 token meter、会话已结束或单次计量失败时返回明确错误；旧 host 缺少影子价时隐藏价差信息，但基础计量仍可用。
 
 ## 平台与兼容性
