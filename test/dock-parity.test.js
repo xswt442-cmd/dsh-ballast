@@ -24,8 +24,8 @@ test('the dock entry is registered the way the protocol requires', () => {
 })
 
 test('ballast self-bootstraps instead of waiting for another plugin', () => {
-  // Single-install was the M1 blocker: joining a dock only DIM/DTK create means
-  // no entry point at all when ballast is the only plugin installed.
+  // Joining a dock that some other plugin happens to create means no entry
+  // point at all when ballast is the only plugin installed.
   assert.match(CLIENT_SRC, /const dock = getUtilityDock\(\)/)
   assert.ok(!/if\s*\(isCompatibleDock\(window\[DOCK_KEY\]\)\)\s*\{/.test(CLIENT_SRC),
     'the client must not silently skip registering when no dock exists yet')
