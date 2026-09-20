@@ -131,6 +131,19 @@ test('RC1 Connection rejection is final and never falls back to the legacy guard
   assert.equal(res.body.code, 'unauthorized')
 })
 
+test('a Connection that cannot answer is treated as unavailable, not as permission', async (t) => {
+  const host = await mount(SURFACE.nodes, {
+    connection: { requestRejection: () => { throw new Error('connection service gone') } }
+  })
+  t.after(() => host.dispose())
+
+  // A throw here used to fall through to the route handler, which then answered
+  // a request no guard had cleared.
+  const res = await send(host.url('?action=sessions'))
+  assert.equal(res.status, 503)
+  assert.equal(res.body.code, 'connection_unavailable')
+})
+
 test('RC1 Connection acceptance replaces the legacy loopback header fence', async (t) => {
   let calls = 0
   const host = await mount(SURFACE.nodes, {
