@@ -31,22 +31,6 @@
       "platform": "web"
     }
   },
-  "dshhub": {
-    "schemaVersion": 1,
-    "displayName": "ballast",
-    "summary": "按消息计量当前 surface 的 token 占用，提供类型聚合与跨会话 Top；只读，不修改会话或触发 compaction。",
-    "categories": ["dev", "Web UI"],
-    "surfaces": ["host", "web"],
-    "capabilities": {},
-    "compatibility": {
-      "dsh": ">=0.1.2-alpha.2",
-      "node": ">=20"
-    },
-    "permissions": {
-      "network": ["http://127.0.0.1:*"],
-      "os": []
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xswt442-cmd/dsh-ballast.git"

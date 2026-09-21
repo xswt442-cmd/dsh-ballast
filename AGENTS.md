@@ -7,7 +7,7 @@
 - Keep `package.json#version` and `lib/shared.js#VERSION` equal, and keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.
 - The two marked blocks in `lib/shared.js` are generated from `dsh-mini-utility-dock`. Edit the dock fragment and run `npm run loopback:sync` / `npm run guard:sync` (either maintains both blocks); never edit a block. The guard block depends on the loopback block, so keep that order.
 - `npm test` checks both blocks against the dock version this repo pins (`loopback:check` / `guard:check`).
-- `scripts/guard-parity.mjs` is a manual diagnostic, not a CI gate: what it asserts cannot hold while a sibling checkout sits on another branch.
+- `scripts/guard-parity.mjs` is a manual diagnostic, not a CI gate: what it asserts cannot hold across checkouts that sit on different branches.
 - Preserve the read-only and host-only boundaries: never fabricate token or pricing data, broaden API methods, or weaken the same-origin guards.
 - Read optional DSH services only inside `ctx.inject(...)` callbacks.
 

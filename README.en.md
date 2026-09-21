@@ -45,7 +45,7 @@ The panel has two views:
 
 The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessions` lists sessions, `measure&sessionId=` measures one session, and `top&limit=` returns cross-session results. The route accepts `GET` and `HEAD` only. Rows without a parseable token price are marked unpriced and excluded from occupancy bars and token shares.
 
-## Limits and security
+## Safety and limits
 
 - Measures live sessions on the current host only; it does not read ended sessions or sessions on other hosts.
 - All operations are read-only: no state writes, message deletion, or compaction; there are no budgets, price tables, compaction forecasts, or content exports.

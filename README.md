@@ -45,7 +45,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 
 面板通过同源只读接口 `/dsh-ballast/api` 获取数据：`sessions` 列出会话，`measure&sessionId=` 计量一个会话，`top&limit=` 返回跨会话结果。接口只接受 `GET` 和 `HEAD`；未提供可解析 token 价格的条目显示为未计价，不参与占用条或 token 占比。
 
-## 边界与安全
+## 安全与边界
 
 - 仅计量当前 host 的 live session，不读取已结束会话或其他 host 的会话。
 - 所有操作只读：不写状态、不删除消息、不触发 compaction，也不提供预算、费用表、压缩预测或正文导出。
