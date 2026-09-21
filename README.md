@@ -5,7 +5,7 @@
 [![DSH](https://img.shields.io/static/v1?label=DSH&message=plugin&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-ballast?label=npm&color=4d6bfe)](https://www.npmjs.com/package/dsh-ballast)
 [![release](https://img.shields.io/github/v/release/xswt442-cmd/dsh-ballast?label=release&color=16a3a3)](https://github.com/xswt442-cmd/dsh-ballast/releases)
-[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.1.2-alpha.2&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.1.2-rc.1&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/static/v1?label=node&message=%3E%3D20&color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
 [![downloads](https://img.shields.io/npm/d18m/dsh-ballast?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-ballast)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
@@ -57,7 +57,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 
 | 项目 | 要求 |
 | --- | --- |
-| DSH | `>=0.1.2-alpha.2` |
+| DSH | `>=0.1.2-rc.1` |
 | Node.js | `>=20` |
 
 能力根据 host 返回的数据判断，不根据版本字符串猜测。RC1 的 `seq/eventAt()/snapshotEvents()` 与旧 `.events` 形状均受支持；projection 缺失时只隐藏增强总览，不影响逐消息 token meter。
