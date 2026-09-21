@@ -205,6 +205,19 @@ test('the bridge binds services inside the inject fence, never at apply time', (
   assert.deepEqual(meterCalls, ['session-1'])
 })
 
+test('a tokenMeter without measure() leaves the bridge unavailable, not lying', () => {
+  // Shape-check on bind: availability() must describe what the bridge can
+  // actually do. A service object that lacks measure() would otherwise read as
+  // 'available' and then fail every request with measure_failed.
+  const bridge = createMeterBridge(makeFenceCtx({
+    tokenMeter: { price: () => measurement },
+    sessions: fenceServices.sessions
+  }))
+  assert.equal(bridge.availability(), 'unavailable')
+  assert.deepEqual(bridge.measure('session-1'), { ok: false, code: 'unavailable' })
+  assert.deepEqual(bridge.listSessions(), [])
+})
+
 test('a malformed measurement is one failed session, not an escaped throw', () => {
   // shapeMeasurement reads measurement.nodes. A measurement the meter still
   // returns but that lacks the node list has to land in the same bucket as a
