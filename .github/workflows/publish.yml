@@ -1,13 +1,18 @@
 name: publish
 
-# A release updates package.json, lib/shared.js, and both changelogs, then tags
-# the release commit as vX.Y.Z. This workflow verifies that contract, publishes
-# to npm with provenance, and creates the GitHub release from CHANGELOG.md.
+# A release is created by bumping package.json + the VERSION constant in
+# lib/shared.js, writing the matching CHANGELOG.md section, then tagging
+# vX.Y.Z and pushing the tag. The GitHub release is cut from that CHANGELOG
+# section, with a compare link to the previous tag appended.
+# npm Trusted Publishing exchanges GitHub's OIDC identity for a publish
+# credential here; no npm token is stored in the repo.
 
 on:
   push:
     tags: ['v*']
 
+# Publishing must never be cancelled halfway through: a second tag landing
+# while the first is on npm would race the registry. Queue instead of cancel.
 concurrency:
   group: publish
   cancel-in-progress: false
@@ -17,12 +22,12 @@ jobs:
     name: publish to npm
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create the GitHub release
-      id-token: write # npm provenance (OIDC)
+      contents: write # Create the matching GitHub release.
+      id-token: write # npm provenance (OIDC).
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # full history, so the notes can compare against the previous tag
 
       - uses: actions/setup-node@v5
         with:
@@ -49,15 +54,13 @@ jobs:
           tag=${GITHUB_REF_NAME#v}
           node --check lib/client.js
           node --check lib/index.js
+          npm test
+          npm run docs:check
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
-          # the self-reported version constant must match the release tag
           grep -qF "VERSION = '${tag}'" lib/shared.js || {
             echo "::error::lib/shared.js VERSION does not match tag ${tag}"
             exit 1
           }
-          # This suite catches payload-level regressions the boot check cannot reach.
-          npm test
-          npm run docs:check
           npm pack --dry-run
 
       - name: skip when version is already published
@@ -70,9 +73,9 @@ jobs:
             echo "::warning::${pkg} is already on npm — nothing to publish"
           fi
 
-      # Auth = npm Trusted Publishing (OIDC), bound to this exact repo +
-      # workflow file in the package's npmjs.com settings. No token secret
-      # exists; --provenance carries the OIDC exchange (needs id-token: write).
+      # Auth = npm Trusted Publishing (OIDC), bound to this exact repo + workflow
+      # file in the package's npmjs.com settings. No token secret exists;
+      # --provenance carries the OIDC exchange (needs id-token: write).
       - name: publish to npm
         if: steps.published.outputs.already != 'yes'
         run: npm publish --provenance --access public
@@ -85,13 +88,21 @@ jobs:
         run: |
           version=${GITHUB_REF_NAME#v}
           notes=$(node scripts/release-notes.mjs "$version")
-          # Not gated on the publish step: a version published out of band - like
-          # the first one, before npm knows this package name at all - still needs
-          # its notes here. Re-running once npm auth exists must converge rather
-          # than fail over an occupied name, so an existing release is updated.
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            echo "::warning::release ${GITHUB_REF_NAME} already exists - refreshing its notes"
-            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"
+          tag=$GITHUB_REF_NAME
+          repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
+          prev=$(git fetch --tags --quiet && git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)
+          if [ -n "$prev" ]; then
+            notes=$(printf '%s\n\n**完整变更**: [`%s...%s`](%s/compare/%s...%s)' "$notes" "$prev" "$tag" "$repo" "$prev" "$tag")
           else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"
+            notes=$(printf '%s\n\n**完整变更**: [`%s`](%s/commits/%s)' "$notes" "$tag" "$repo" "$tag")
+          fi
+          # Not gated on the publish step: a version published out of band — like
+          # the first one, before npm knows this package name at all — still needs
+          # its notes here. Re-running must converge rather than fail over an
+          # occupied name, so an existing release is refreshed instead.
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "::warning::release $tag already exists - refreshing its notes"
+            gh release edit "$tag" --title "$tag" --notes "$notes"
+          else
+            gh release create "$tag" --title "$tag" --notes "$notes"
           fi
