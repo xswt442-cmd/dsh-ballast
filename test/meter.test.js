@@ -205,6 +205,23 @@ test('the bridge binds services inside the inject fence, never at apply time', (
   assert.deepEqual(meterCalls, ['session-1'])
 })
 
+test('a malformed measurement is one failed session, not an escaped throw', () => {
+  // shapeMeasurement reads measurement.nodes. A measurement the meter still
+  // returns but that lacks the node list has to land in the same bucket as a
+  // corrupt log: measure() answers measure_failed and top() records a failure,
+  // rather than the throw escaping the route as a 500 (README 安全模型).
+  const malformed = { ...measurement, nodes: undefined }
+  const bridge = createMeterBridge(makeFenceCtx({
+    tokenMeter: { measure: () => malformed },
+    sessions: fenceServices.sessions
+  }))
+  assert.equal(bridge.measure('session-1').code, 'measure_failed')
+  const top = bridge.top(5)
+  assert.equal(top.ok, true, 'one bad session must not fail the whole host view')
+  assert.deepEqual(top.sessions, [])
+  assert.equal(top.failedCount, 1)
+})
+
 test('reading a service off ctx outside the fence is exactly what the harness forbids', () => {
   const ctx = makeFenceCtx(fenceServices)
   assert.throws(() => ctx.tokenMeter, /without inject/)
