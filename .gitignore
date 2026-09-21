@@ -7,7 +7,7 @@ npm-debug.log*
 yarn-error.log*
 logs/
 
-# Build and coverage output
+# Build & coverage output
 dist/
 build/
 coverage/
@@ -18,7 +18,7 @@ coverage/
 *.tar.gz
 .npm/
 
-# Environment and secrets
+# Environment & secrets
 .env
 .env.*
 !.env.example
@@ -27,20 +27,20 @@ coverage/
 *.key
 *.p12
 
-# Ad-hoc QA scripts and scratch
+# Ad-hoc QA scripts and scratch — these never belong in the repo
 /bootcheck.sh
 /diag.sh
 /repro*.sh
+/testplace/
 /test-*
 /test1.*
-/testplace/
 
 # Local browser captures
 .playwright-mcp/
 playwright-report/
 test-results/
 
-# Editors and OS
+# Editors & OS
 .DS_Store
 Thumbs.db
 desktop.ini

@@ -24,3 +24,4 @@ jobs:
       - name: require paired edits
         if: env.DOCS_BASE != ''
         run: npm run docs:check -- --base "$DOCS_BASE"
+

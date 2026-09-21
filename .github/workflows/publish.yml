@@ -48,6 +48,7 @@ jobs:
         run: |
           tag=${GITHUB_REF_NAME#v}
           node --check lib/client.js
+          node --check lib/index.js
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
           # the self-reported version constant must match the release tag
           grep -qF "VERSION = '${tag}'" lib/shared.js || {
