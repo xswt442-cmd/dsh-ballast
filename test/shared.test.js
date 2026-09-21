@@ -128,8 +128,8 @@ test('guard admits only exact loopback hosts and matching Origins', () => {
 })
 
 // Regression: consumers of the generated guard block used to disagree on the
-// IPv4-mapped IPv6 form. Ballast rejected `[::ffff:127.0.0.1]:3080` while a
-// sibling accepted it, which is exactly the drift scripts/guard-parity.mjs
+// IPv4-mapped IPv6 form. Ballast rejected `[::ffff:127.0.0.1]:3080` while
+// another copy accepted it, which is exactly the drift scripts/guard-parity.mjs
 // exists to catch. The form is loopback and must be admitted in both spellings —
 // a dual-stack browser reaches the panel that way, and the WHATWG URL parser
 // rewrites the dotted form to hex in an Origin.
