@@ -3,6 +3,17 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.3.0 - 2026-09-23
+
+### Fixed
+
+- The meter bridge shape-checks the services it binds: a host injecting a tokenMeter without `measure` no longer reports `available` and then fails every request.
+- Shaping sits inside the same fence as measure: a throw used to escape as a 500 and take the host-wide view down with it.
+
+### Changed
+
+- The declared minimum DSH version is now `>=0.1.2-rc.1` (was `>=0.1.2-alpha.2`; CI never covered the alpha line).
+
 ## 0.2.10 - 2026-09-17
 
 ### Changed

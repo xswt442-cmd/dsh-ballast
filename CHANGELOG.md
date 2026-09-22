@@ -3,6 +3,17 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.3.0 - 2026-09-23
+
+### 修复
+
+- meter 绑定服务时做形状校验：宿主注入一个缺 `measure` 的 tokenMeter 时，可用性不再谎报 `available` 然后每个请求都失败。
+- measure 之后的 shaping 收进同一围栏：此前抛错会穿透成 500，并连带让 host 级视图读不出来。
+
+### 变更
+
+- README 声明的最低 DSH 版本改为 `>=0.1.2-rc.1`（原 `>=0.1.2-alpha.2`；CI 从未覆盖 alpha 线）。
+
 ## 0.2.10 - 2026-09-17
 
 ### 变更
