@@ -35,7 +35,7 @@ const REFRESH_SRC = region(PANEL_SRC, 'const refresh =', 'React.useEffect(')
 const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
   'timeLabel', 'baselineLabel', 'shadowBadge',
   'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge',
-  'releaseLoading']
+  'releaseLoading', 'factSummary']
 
 // Keep copy assertions deterministic across developer machines and CI. Node 24
 // exposes navigator.language, so otherwise the evaluated browser fallback uses
@@ -168,6 +168,29 @@ test('snapshot age is reported only when both clocks are readable', () => {
     assert.equal(view.snapshotAge(junk, t), '', `${String(junk)} is not a receive time`)
     assert.equal(view.snapshotAge(t, junk), '', `${String(junk)} is not a clock reading`)
   }
+})
+
+test('a session fact line names only what the host measured', () => {
+  // Nothing cached: the hover seat must offer its action and no number at all,
+  // because a dash or a 0 would read as a measurement the plugin never took.
+  assert.equal(view.factSummary(null), '')
+  assert.equal(view.factSummary(undefined), '')
+  assert.equal(view.factSummary({}), '')
+  // The session list carries no token figure; its log length is the only real
+  // thing it does carry, and it is a fallback rather than a headline.
+  assert.equal(view.factSummary({ eventCount: 12 }), '日志 12 条')
+  // Measured facts outrank the log length, and a non-numeric host field is not
+  // turned into a number.
+  assert.equal(view.factSummary({ surfaceTokens: 1234, eventCount: 12 }), 'surface 1,234')
+  assert.equal(view.factSummary({
+    surfaceTokens: 1234, eventCount: 12, heaviest: { seq: 7, tokens: 900 }
+  }), 'surface 1,234 · 最重 #7 900')
+  assert.equal(view.factSummary({ surfaceTokens: '1234' }), '',
+    'a string is not a token figure')
+  assert.equal(view.factSummary({ heaviest: { seq: 7, tokens: null } }), '',
+    'an unpriced heaviest entry is not a number')
+  assert.equal(view.factSummary({ heaviest: { seq: null, tokens: 900 } }), '最重 900',
+    'a missing seq is dropped, not rendered as #null')
 })
 
 test('the panel calls every helper instead of formatting inline', () => {
