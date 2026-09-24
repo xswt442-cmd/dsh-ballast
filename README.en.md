@@ -18,8 +18,8 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 - Show the current route price and, when the host supplies a heuristic shadow price, mark the difference. A difference only indicates that an image may have been repriced as visual tokens; it is not an anomaly or an importance score.
 - Show token share aggregated by message type and the heaviest entry in each live session on the current host.
 - Show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and provider-anchored pressure use different accounting bases and are not forced to sum.
-- List live sessions on the current host and open the panel from the Mini Utility Dock; when a title is missing, fall back to the workspace basename and session ID.
-- Follow DSH's global language setting across the panel, Dock, and accessible labels; older hosts fall back to the browser language.
+- List live sessions on the current host and open the panel from the family menu at the bottom-left of the work area (one icon, three panels); when a title is missing, fall back to the workspace basename and session ID.
+- Follow DSH's global language setting across the panel, the launcher icon, and accessible labels; older hosts fall back to the browser language.
 
 ## Install
 
@@ -34,7 +34,7 @@ npm install dsh-ballast
 dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 ```
 
-`npm install` downloads the package only; it does not enable the DSH profile. To use the plugin in DSH, add its bundle to a profile. Restart DSH Web after installation and open `ballast` from the Mini Utility Dock.
+`npm install` downloads the package only; it does not enable the DSH profile. To use the plugin in DSH, add its bundle to a profile. Restart DSH Web after installation and open `ballast` from the family menu at the bottom-left of the work area.
 
 ## Usage
 

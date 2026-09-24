@@ -9,9 +9,11 @@ test('client bundle registers under the package name', () => {
   assert.ok(client.includes(`id: '${pkg.name}'`), 'client bundle id must match package name')
 })
 
-test('client bundle joins the shared utility dock protocol', () => {
-  assert.ok(client.includes('__CREATEHELPER_DSH_UTILITY_DOCK_V1__'), 'dock key missing')
-  assert.ok(client.includes('createhelper.dsh.utility-dock'), 'dock protocol missing')
+test('client bundle joins the family menu instead of a page-local dock', () => {
+  assert.ok(client.includes("'createhelper.utility.item'"), 'the row must register on the family menu seat')
+  assert.ok(client.includes('registerUtilityLauncher(scope)'), 'the client must be able to claim the launcher')
+  assert.ok(!client.includes('__CREATEHELPER_DSH_UTILITY_DOCK_V1__'), 'the retired dock key must be gone')
+  assert.ok(!client.includes('createhelper.dsh.utility-dock'), 'the retired dock protocol must be gone')
 })
 
 test('client bundle is a classic script (no node imports)', () => {

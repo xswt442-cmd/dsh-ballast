@@ -18,8 +18,8 @@ DSH Web 上下文窗口归因插件。它按消息条目显示当前 surface 的
 - 显示当前路由价格，并在 host 同时提供 heuristic 影子价时标出价差。价差只表示图像可能经过视觉 token 重定价，不表示异常或内容重要性。
 - 显示按消息类型聚合的 token 占比，以及当前 host 上各 live session 中最重的条目。
 - 显示 provider usage、下一次请求的窗口压力，以及 system/tools/messages 的估算构成；这些构成值与 provider 锚定值口径不同，不强行求和。
-- 列出当前 host 的 live session，并从 Mini Utility Dock 打开面板；标题缺失时回退到工作区目录名和 session ID。
-- 面板、Dock 和可访问名称跟随 DSH 的全局语言设置；旧 host 回退到浏览器语言。
+- 列出当前 host 的 live session，并从页面左下的家族菜单（图标展开，三个面板同列）打开面板；标题缺失时回退到工作区目录名和 session ID。
+- 面板、入口图标和可访问名称跟随 DSH 的全局语言设置；旧 host 回退到浏览器语言。
 
 ## 安装
 
@@ -34,7 +34,7 @@ npm install dsh-ballast
 dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 ```
 
-`npm install` 只下载 package，不会启用 DSH profile；在 DSH 中使用仍需将 bundle 加入 profile。安装后重启 DSH Web，并从 Mini Utility Dock 打开 `ballast`。
+`npm install` 只下载 package，不会启用 DSH profile；在 DSH 中使用仍需将 bundle 加入 profile。安装后重启 DSH Web，并从页面左下的家族菜单打开 `ballast`。
 
 ## 使用
 
