@@ -61,9 +61,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # Pin the declared compatibility line and the current release
-        # candidate independently from the moving latest install channel.
-        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.1', '@latest']
+        # Cover the new minimum, the 0.1.7 API line, and the moving latest
+        # channel. `@latest` is a canary; the two explicit versions are stable
+        # compatibility anchors for this matrix.
+        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.1', '@latest']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

@@ -5,7 +5,7 @@
 [![DSH](https://img.shields.io/static/v1?label=DSH&message=plugin&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-ballast?label=npm&color=4d6bfe)](https://www.npmjs.com/package/dsh-ballast)
 [![release](https://img.shields.io/github/v/release/xswt442-cmd/dsh-ballast?label=release&color=16a3a3)](https://github.com/xswt442-cmd/dsh-ballast/releases)
-[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.1.2-rc.1&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.1.5-rc.3&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/static/v1?label=node&message=%3E%3D20&color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
 [![downloads](https://img.shields.io/npm/d18m/dsh-ballast?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-ballast)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
@@ -17,7 +17,7 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 - List user messages, assistant messages, and tool results by token occupancy. Text is whitespace-collapsed and truncated; tool results show their tool name, while reasoning blocks and images are counted but not inlined.
 - Show the current route price and, when the host supplies a heuristic shadow price, mark the difference. A difference only indicates that an image may have been repriced as visual tokens; it is not an anomaly or an importance score.
 - Show token share aggregated by message type and the heaviest entry in each live session on the current host.
-- On DSH 0.1.2-rc.1, show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and provider-anchored pressure use different accounting bases and are not forced to sum.
+- Show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and provider-anchored pressure use different accounting bases and are not forced to sum.
 - List live sessions on the current host and open the panel from the Mini Utility Dock; when a title is missing, fall back to the workspace basename and session ID.
 - Follow DSH's global language setting across the panel, Dock, and accessible labels; older hosts fall back to the browser language.
 
@@ -49,7 +49,7 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 
 - Measures live sessions on the current host only; it does not read ended sessions or sessions on other hosts.
 - All operations are read-only: no state writes, message deletion, or compaction; there are no budgets, price tables, compaction forecasts, or content exports.
-- On DSH 0.1.0-rc.7 and newer, the API reuses Connection's Host/Origin checks and signed browser cookie; missing or invalid browser authentication returns `401/403`. Only a host that does not mount Connection falls back to the local TCP-peer, Fetch Metadata, `Origin`, and loopback-`Host` guard. Mutation-shaped methods return `405`.
+- On DSH 0.1.5-rc.3 and newer, the API reuses Connection's Host/Origin checks and signed browser cookie; missing or invalid browser authentication returns `401/403`. Only a host that does not mount Connection falls back to the local TCP-peer, Fetch Metadata, `Origin`, and loopback-`Host` guard. Mutation-shaped methods return `405`.
 - In that fallback mode a local process that can reach the DSH Web port remains inside the trust boundary; with Connection, a valid DSH browser session is required.
 - Missing host services, ended sessions, and per-session measurement failures return explicit errors. Older hosts without shadow prices retain basic measurement but hide price-difference data.
 
@@ -57,7 +57,7 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 
 | Item | Requirement |
 | --- | --- |
-| DSH | `>=0.1.2-rc.1` |
+| DSH | `>=0.1.5-rc.3` |
 | Node.js | `>=20` |
 
 Capabilities are derived from host-returned data rather than guessed from version strings. Both RC1's `seq/eventAt()/snapshotEvents()` API and the older `.events` shape are supported; missing projections hide only the enhanced overview, not per-message token-meter attribution.
