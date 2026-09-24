@@ -64,7 +64,7 @@ jobs:
         # Cover the new minimum, the 0.1.7 API line, and the moving latest
         # channel. `@latest` is a canary; the two explicit versions are stable
         # compatibility anchors for this matrix.
-        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.1', '@latest']
+        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2', '@latest']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
