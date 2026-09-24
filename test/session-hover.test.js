@@ -152,7 +152,7 @@ function boot(server) {
   }
   plugin.apply({
     get() {},
-    inject(services, mount) { mount({ slots }) },
+    inject(services, mount) { mount({ slots, on() {} }) },
     on() {}
   })
 
