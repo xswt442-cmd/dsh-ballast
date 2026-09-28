@@ -7,164 +7,11 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import vm from 'node:vm'
+import {
+  HOVER_SLOT, OVERLAY_SLOT, UTILITY_ITEM_SLOT, allNodes, bootClient, buttonsIn, settle, textOf
+} from './support/client-runtime.js'
 
-const SOURCE = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
-const HOVER_SLOT = 'sidebar.session.row.hover'
-
-// --- hand-rolled React ----------------------------------------------------
-// Hook slots belong to a component function, not to a global render order: the
-// seat and the panel both render in these tests, so one shared hook array (the
-// treekeeper-style fake) would hand one component the other's slots. Effects
-// run at render time and honour their dependency list, because the focus path
-// under test is an effect that must fire for a request and not for a re-render.
-function makeFakeReact() {
-  const stores = new Map()
-  let current = null
-
-  const react = {
-    Fragment: Symbol('Fragment'),
-    createElement(type, props, ...children) {
-      const flat = children.flat(Infinity)
-        .filter((child) => child !== null && child !== undefined && child !== false && child !== true)
-      return { type, props: props || {}, children: flat }
-    },
-    useState(initial) {
-      const store = current
-      const index = store.index++
-      if (!(index in store.hooks)) store.hooks[index] = typeof initial === 'function' ? initial() : initial
-      return [store.hooks[index], (value) => {
-        store.hooks[index] = typeof value === 'function' ? value(store.hooks[index]) : value
-      }]
-    },
-    useRef(initial) {
-      const store = current
-      const index = store.index++
-      if (!(index in store.hooks)) store.hooks[index] = { current: initial }
-      return store.hooks[index]
-    },
-    useCallback(callback) { return callback },
-    useEffect(callback, deps) {
-      const store = current
-      const index = store.index++
-      const previous = store.hooks[index]
-      const changed = previous === undefined || deps === undefined || previous.deps === undefined ||
-        deps.some((value, at) => !Object.is(value, previous.deps[at]))
-      if (!changed) return
-      if (previous && typeof previous.cleanup === 'function') previous.cleanup()
-      store.hooks[index] = { deps, cleanup: undefined }
-      const cleanup = callback()
-      if (typeof cleanup === 'function') store.hooks[index].cleanup = cleanup
-    }
-  }
-
-  const storeFor = (type) => {
-    let store = stores.get(type)
-    if (!store) {
-      store = { hooks: [], index: 0 }
-      stores.set(type, store)
-    }
-    return store
-  }
-
-  function renderNode(element) {
-    if (element === null || element === undefined || element === false || element === true) return null
-    if (typeof element !== 'object') return { type: 'text', props: {}, text: String(element), children: [] }
-    if (element.type === react.Fragment) {
-      return { type: 'fragment', props: {}, children: (element.children || []).map(renderNode).filter(Boolean) }
-    }
-    if (typeof element.type === 'function') {
-      const store = storeFor(element.type)
-      store.index = 0
-      const previous = current
-      current = store
-      let rendered
-      try { rendered = element.type(element.props) } finally { current = previous }
-      return renderNode(rendered)
-    }
-    return {
-      type: element.type,
-      props: element.props || {},
-      children: (element.children || []).map(renderNode).filter(Boolean)
-    }
-  }
-
-  return { react, renderNode }
-}
-
-function allNodes(node, predicate, out = []) {
-  if (!node) return out
-  if (predicate(node)) out.push(node)
-  for (const child of node.children || []) allNodes(child, predicate, out)
-  return out
-}
-
-function textOf(node) {
-  if (!node) return ''
-  return (node.text || '') + (node.children || []).map(textOf).join('')
-}
-
-function byClass(className) {
-  return (node) => node.props && node.props.className === className
-}
-
-// Settle the async read chain: sessions -> json -> measure -> json -> cache.
-const settle = async () => {
-  for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0))
-}
-
-// --- boot -----------------------------------------------------------------
-
-function boot(server) {
-  const { react, renderNode } = makeFakeReact()
-  const registered = []
-  const fetched = []
-  const context = {
-    console: { warn() {}, error() {} },
-    navigator: { language: 'en-US' },
-    document: {
-      head: { appendChild() {} },
-      createElement() {
-        return { style: {}, dataset: {}, setAttribute() {}, remove() {}, appendChild() {} }
-      },
-      querySelector() { return null },
-      addEventListener() {},
-      removeEventListener() {}
-    },
-    window: { addEventListener() {}, removeEventListener() {} },
-    fetch: async (url) => {
-      fetched.push(String(url))
-      return { ok: true, status: 200, json: async () => server(String(url)) }
-    }
-  }
-  let definition = null
-  context.window.__ModuleLoader__ = { load(value) { definition = value } }
-  vm.runInNewContext(SOURCE, context, { filename: 'lib/client.js' })
-
-  const plugin = definition.factory((name) => {
-    assert.equal(name, 'react')
-    return react
-  })
-  const slots = {
-    inject(name, mount) { mount() },
-    register(options, render) { registered.push({ options, render }) }
-  }
-  plugin.apply({
-    get() {},
-    inject(services, mount) { mount({ slots, on() {} }) },
-    on() {}
-  })
-
-  const entry = (name, id) => registered.find((item) =>
-    item.options.name === name && item.options.id === id)
-  // The hover seat registers its component directly, so a test renders it the
-  // way the framework would: as an element, never by calling it bare.
-  const seat = (props) => renderNode(react.createElement(entry(HOVER_SLOT, 'ballast').render, props))
-  return { plugin, registered, fetched, renderNode, seat, entry }
-}
-
-// A host that answers the plugin's two read shapes with fixed facts.
+// A host that answers the plugin's read shapes with fixed facts.
 function hostServer() {
   return (url) => {
     if (url.includes('action=sessions')) {
@@ -202,6 +49,14 @@ function hostServer() {
   }
 }
 
+// The hover seat registers its component directly, so a test renders it the
+// way the framework would: as an element, never by calling it bare.
+const boot = (server) => {
+  const client = bootClient({ server })
+  const seat = (props) => client.renderSeat(HOVER_SLOT, 'ballast', props)
+  return { ...client, seat }
+}
+
 // --- seat registration ----------------------------------------------------
 
 test('the seat registers on the Sidebar Session row hover card with this plugin id', () => {
@@ -213,9 +68,9 @@ test('the seat registers on the Sidebar Session row hover card with this plugin 
     'the seat keeps a small order so it stays inside the hover card')
   assert.notEqual(hover.options.order, 10, 'the shipped schedule section owns order 10')
   // The registrations that already existed are untouched.
-  assert.ok(entry('createhelper.utility.item', 'ballast'), 'the family menu row is gone')
-  assert.ok(entry('shell.overlay', 'ballast-panel'), 'the panel is gone')
-  assert.ok(entry('shell.overlay', 'utility-launcher'), 'the launcher claim is gone')
+  assert.ok(entry(UTILITY_ITEM_SLOT, 'ballast'), 'the launcher menu row is gone')
+  assert.ok(entry(OVERLAY_SLOT, 'ballast-panel'), 'the panel is gone')
+  assert.ok(entry(OVERLAY_SLOT, 'utility-launcher'), 'the launcher claim is gone')
   assert.ok(registered.every((item) => item.options.name !== HOVER_SLOT || item.options.id === 'ballast'),
     'this plugin contributes exactly one row to the seat')
 })
@@ -232,7 +87,7 @@ test('an uncached row offers the action and fabricates no number', () => {
   assert.equal(buttons[0].props.title, 'Open per-entry attribution for this session')
   assert.equal(textOf(rendered), 'Show breakdown')
   assert.ok(!/\d/.test(textOf(rendered)), 'nothing cached must render no digit at all')
-  assert.equal(allNodes(rendered, byClass('dshbl-hover-fact')).length, 0,
+  assert.equal(allNodes(rendered, (node) => node.props.className === 'dshbl-hover-fact').length, 0,
     'with nothing cached there is no summary element')
   assert.deepEqual(fetched, [], 'rendering the seat must not call the host')
 
@@ -244,12 +99,12 @@ test('an uncached row offers the action and fabricates no number', () => {
 // --- cached fact + the action focuses the panel ---------------------------
 
 test('the row repeats a cached measurement, and its action focuses the panel on that session', async () => {
-  const { fetched, renderNode, seat, entry } = boot(hostServer())
+  const { fetched, renderNode, entry, seat } = boot(hostServer())
 
   // Open the panel the way a user does, so its own read fills the cache.
-  const menuTree = renderNode(entry('createhelper.utility.item', 'ballast').render({}))
-  allNodes(menuTree, (node) => node.type === 'button')[0].props.onClick()
-  const panel = entry('shell.overlay', 'ballast-panel')
+  const menuTree = renderNode(entry(UTILITY_ITEM_SLOT, 'ballast').render({}))
+  buttonsIn(menuTree)[0].props.onClick()
+  const panel = entry(OVERLAY_SLOT, 'ballast-panel')
   renderNode(panel.render())
   await settle()
   assert.ok(fetched.includes('/dsh-ballast/api?action=measure&sessionId=session-a'),

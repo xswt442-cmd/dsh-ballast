@@ -1,6 +1,10 @@
 name: compat
 
 on:
+  # The gate has to run where a change can still be acted on. With only push and
+  # schedule here, the first signal a branch sends was the merge commit turning
+  # `main` red, and a PR could land without ever having been tested.
+  pull_request:
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
@@ -16,15 +20,28 @@ permissions:
 
 jobs:
   static:
-    name: static checks
+    name: static checks (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor `engines.node` promises, and a promise no job runs is a
+        # promise that quietly stops being true. 24 is the line this plugin is
+        # developed and released against.
+        node: [20, 24]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
+      # This repository tracks no lockfile on purpose (.gitignore: pinning
+      # devDependency tarballs says nothing about a published library whose runtime
+      # is plain Node ESM with zero dependencies). `npm ci` and setup-node's
+      # `cache: npm` both take their input from a lockfile, so neither is available
+      # here; `--ignore-scripts` is what keeps a registry-side install hook out of
+      # this job.
       - name: install development dependencies
-        run: npm install --ignore-scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: syntax check every module
         run: |
           set -e
@@ -49,11 +66,19 @@ jobs:
           $shared = Get-Content lib/shared.js -Raw
           if ($shared -notmatch [regex]::Escape("VERSION = '$($pkg.version)'")) { Write-Error 'lib/shared.js VERSION does not match package version' }
 
-  # The two shared host fragments are verified locally by `npm test`, which runs
-  # loopback:check / guard:check against the pinned dock version. A cross-repo
-  # comparison is not run here: its property cannot hold while a peer checkout
-  # resolves to a different branch. `dsh-plugin-parity` (from the dock) stays available as a
-  # manual diagnostic for when every checkout shares a branch.
+  # The three shared host fragments are verified locally by `npm test`, which runs
+  # http:check / loopback:check / guard:check against the pinned dock version. No
+  # comparison against files outside this repository runs here: `dsh-plugin-parity`
+  # (from the dock) is that comparison, and its verdict only means something while
+  # every checkout it reads sits on the same branch, so it stays a manual diagnostic.
+  #
+  # This job boots the real host with this bundle mounted, on both platforms and
+  # both declared host lines, and both cells assert the same payload contract after
+  # the boot (the field list, the row/`nodeCount` agreement, and the anti-fabrication
+  # rules). What neither cell covers, and what the unit tests carry instead: the
+  # per-row shape when a CI host has no provider route and so measures 0 surface
+  # nodes — the check says so on the transcript when that happens — and the plugin's
+  # own embedded guard, which only runs on a host that mounts no Connection service.
   boot-check:
     name: boot DSH Web with bundle (${{ matrix.os }}, ${{ matrix.dsh-spec }})
     runs-on: ${{ matrix.os }}
@@ -61,10 +86,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # Cover the new minimum, the 0.1.7 API line, and the moving latest
-        # channel. `@latest` is a canary; the two explicit versions are stable
-        # compatibility anchors for this matrix.
-        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2', '@latest']
+        # Cover the declared floor and the 0.1.7 API line, both pinned. There is
+        # deliberately no `@latest` cell: a moving channel makes this repository's
+        # main and dev go red the moment the host publishes, on a change nobody
+        # here made and with nothing in the diff to point at. When every other
+        # matrix cell is green and only `@latest` is failing, the red is the
+        # upstream event, and a gate whose failures mean nothing gets ignored
+        # when it means something. The host line is adopted on purpose instead:
+        # raise `engines.dsh`, the peer and the README badge together, and this
+        # matrix pins the new line as its floor.
+        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -117,7 +148,7 @@ jobs:
             "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-ballast"] } }
           }
           EOF
-      - name: boot and verify Ballast
+      - name: boot and verify Ballast (windows, same field contract)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
@@ -129,6 +160,20 @@ jobs:
           if (-not (Test-Path $dshBin)) { throw "dsh bin not found at $dshBin" }
           $outFile = Join-Path $env:RUNNER_TEMP 'dsh-web-out.log'
           $errFile = Join-Path $env:RUNNER_TEMP 'dsh-web-err.log'
+          # The host prints its launch token into its own stdout when it announces
+          # the URL, and that token is a credential for the runner's web server for
+          # as long as the process lives. Printing a raw log on failure therefore
+          # publishes it into the workflow transcript, which is retained and readable
+          # far wider than the job. Echo the log with those lines replaced instead:
+          # everything a failed boot says about a token is exactly what must not
+          # survive the failure path. The lines the auth step needs are read from
+          # the file directly, unredacted, and never echoed.
+          function Show-DshLog([string]$path) {
+            if (-not (Test-Path $path)) { return "<no log at $path>" }
+            ((Get-Content $path) | ForEach-Object {
+              if ($_ -match '[?&]token=' -or $_ -match '(?i)launch[\s_-]?token') { '<line redacted: carried a launch token>' } else { $_ }
+            }) -join "`n"
+          }
           $process = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", 'web', '--port', '3131' -WindowStyle Hidden -PassThru -RedirectStandardOutput $outFile -RedirectStandardError $errFile
           try {
             # Readiness is "the port answers", not "answers 200". rc builds
@@ -146,12 +191,14 @@ jobs:
               if ($process.HasExited) { break }
               Start-Sleep -Seconds 1
             }
-            if (-not $ready) { throw "dsh web did not become ready`nstdout:`n$(Get-Content $outFile -Raw)`nstderr:`n$(Get-Content $errFile -Raw)`n" }
+            if (-not $ready) { throw "dsh web did not become ready`nstdout:`n$(Show-DshLog $outFile)`nstderr:`n$(Show-DshLog $errFile)`n" }
 
             # Auth: redeem the announced launch token on GET / (it is honoured
             # nowhere else) to get the cookie /api/* needs. A build with no auth
             # announces the bare URL, so the token is opportunistic, never
-            # required. It can reach the log after the first 401, so retry.
+            # required. It can reach the log after the first 401, so retry. The
+            # token is read out of the log here and used in a request; nothing on
+            # this path echoes the log, and the failure paths below redact it.
             $tokenPattern = [regex]'[?&]token=([^&\s]+)'
             $session = $null
             $shell = $null
@@ -167,7 +214,7 @@ jobs:
               } catch {}
               if (-not $shell) { Start-Sleep -Seconds 1 }
             }
-            if (-not $shell) { throw "the web shell never answered 200 (launch token announced: $announced)`nstdout:`n$(Get-Content $outFile -Raw)`nstderr:`n$(Get-Content $errFile -Raw)`n" }
+            if (-not $shell) { throw "the web shell never answered 200 (launch token announced: $announced)`nstdout:`n$(Show-DshLog $outFile)`nstderr:`n$(Show-DshLog $errFile)`n" }
             Write-Host "web shell authenticated (launch token announced: $announced)"
             $auth = @{ WebSession = $session }
 
@@ -268,9 +315,13 @@ jobs:
                   if ($null -eq $row.PSObject.Properties[$field]) { throw "row #$($row.seq) is missing $field" }
                 }
                 # Anti-fabrication: a host that does not emit the shadow price
-                # must yield nulls, never a delta that just equals tokens.
+                # must yield nulls, never a delta that just equals tokens. The
+                # subtraction is the trap — `tokens - $null` is `tokens` — so the
+                # rule is read off the missing shadow price itself, not off the
+                # delta arithmetic.
                 if ($m.shadowPricing -eq 'absent' -and $null -ne $row.heuristicTokens) { throw "shadowPricing=absent but row #$($row.seq) carries a shadow price" }
                 if ($m.shadowPricing -eq 'available' -and $null -eq $row.heuristicTokens) { throw "shadowPricing=available but row #$($row.seq) has no shadow price" }
+                if ($null -eq $row.heuristicTokens -and ($null -ne $row.priceDelta -or $null -ne $row.routePriced)) { throw "row #$($row.seq) has no shadow price yet reports a delta or a priced flag" }
                 if ($null -ne $row.priceDelta -and $row.priceDelta -ne ($row.tokens - $row.heuristicTokens)) { throw "row #$($row.seq) priceDelta does not match tokens - heuristicTokens" }
               }
             }
@@ -280,7 +331,7 @@ jobs:
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           }
-      - name: boot and verify Ballast (linux)
+      - name: boot and verify Ballast (linux, same field contract)
         if: runner.os == 'Linux'
         shell: bash
         env:
@@ -294,17 +345,31 @@ jobs:
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
           code() { curl -s -o /dev/null -w '%{http_code}' --noproxy '*' "$@"; }
+          # The host announces its launch token on stdout, and that token is a
+          # credential for the runner's web server for as long as the process lives.
+          # A raw `cat` on the failure path would publish it into the workflow
+          # transcript, which is retained and readable far more widely than the job
+          # that produced it. Drop the lines that carry one; the token itself is read
+          # out of the log below and used, never echoed.
+          show_log() {
+            for file in "$@"; do
+              [ -f "$file" ] || { echo "<no log at $file>"; continue; }
+              echo "--- $file"
+              grep -viE '[?&]token=|launch[ _-]?token' "$file" || true
+            done
+          }
           ready=0
           for i in $(seq 60); do
             [ "$(code http://127.0.0.1:3131/)" != '000' ] && { ready=1; break; }
             kill -0 "$pid" 2>/dev/null || break
             sleep 1
           done
-          [ "$ready" = 1 ] || { echo '::error::dsh web did not become ready'; cat /tmp/dsh-web-out.log /tmp/dsh-web-err.log; exit 1; }
+          [ "$ready" = 1 ] || { echo '::error::dsh web did not become ready'; show_log /tmp/dsh-web-out.log /tmp/dsh-web-err.log; exit 1; }
 
           # Alpha gates mutating /api/* routes behind a one-shot launch token.
-          # Redeem the URL announced in the host log and retain its cookie;
-          # latest currently needs neither, so the same flow is harmless there.
+          # Redeem the URL announced in the host log and retain its cookie; a build
+          # with no auth announces the bare URL and needs nothing, so the same flow
+          # is harmless there.
           cookieJar="$RUNNER_TEMP/dsh.cookies"
           shellHtml="$RUNNER_TEMP/dsh-shell.html"
           shellReady=0
@@ -319,7 +384,7 @@ jobs:
             [ "$status" = 200 ] && { shellReady=1; break; }
             sleep 1
           done
-          [ "$shellReady" = 1 ] || { echo "::error::web shell never answered 200 (launch token announced: $announced)"; cat /tmp/dsh-web-out.log /tmp/dsh-web-err.log; exit 1; }
+          [ "$shellReady" = 1 ] || { echo "::error::web shell never answered 200 (launch token announced: $announced)"; show_log /tmp/dsh-web-out.log /tmp/dsh-web-err.log; exit 1; }
           code() { curl -s -o /dev/null -w '%{http_code}' --noproxy '*' -b "$cookieJar" "$@"; }
 
           base='http://127.0.0.1:3131/dsh-ballast/api'
@@ -358,7 +423,68 @@ jobs:
             sleep 1
           done
           [ "$listed" = 1 ] || { echo "::error::created session not measurable: $created"; exit 1; }
-          measured=$(curl -s --noproxy '*' -b "$cookieJar" --max-time 60 "$base?action=measure&sessionId=$created")
-          printf '%s' "$measured" | grep -q '"ok":true' || { echo "::error::measure failed: $measured"; exit 1; }
-          printf '%s' "$measured" | grep -q '"rows"' || { echo '::error::measurement missing rows'; exit 1; }
+
+          # The two cells now assert the same contract. The Windows one used to own
+          # the field checks while this one grepped the body for `"rows"` — and a
+          # body of `{"rows":[]}` satisfies that grep, so on Linux a measurement
+          # missing every field, or carrying a delta that was really the token count
+          # copied, went green. A grep over a JSON body states the spelling of a key,
+          # not the content of it; node reads the payload the way the panel does.
+          sessionsFile="$RUNNER_TEMP/sessions.json"
+          curl -sS --noproxy '*' -b "$cookieJar" --max-time 20 -o "$sessionsFile" "$base?action=sessions"
+          node -e '
+            const fs = require("node:fs")
+            const [file, sessionId] = process.argv.slice(1)
+            const fail = (message) => { console.error("::error::" + message); process.exit(1) }
+            let body
+            try { body = JSON.parse(fs.readFileSync(file, "utf8")) } catch (e) { fail(file + " is not a JSON payload: " + e.message) }
+            if (!body.ok) fail("sessions returned an unexpected payload")
+            const listed = (body.sessions || []).filter((entry) => entry.sessionId === sessionId)
+            if (listed.length !== 1) fail("the created live session is not in the list: " + sessionId)
+            if (!listed[0].title) fail("the session list must carry a display title")
+            if (!listed[0].titleSource) fail("the session list must say where the title came from")
+          ' "$sessionsFile" "$created"
+
+          measureFile="$RUNNER_TEMP/measure.json"
+          curl -sS --noproxy '*' -b "$cookieJar" --max-time 60 -o "$measureFile" "$base?action=measure&sessionId=$created"
+          node -e '
+            const fs = require("node:fs")
+            const [file, sessionId] = process.argv.slice(1)
+            const fail = (message) => { console.error("::error::" + message); process.exit(1) }
+            let body
+            try { body = JSON.parse(fs.readFileSync(file, "utf8")) } catch (e) { fail(file + " is not a JSON payload: " + e.message) }
+            if (!body.ok) fail("measure on a live session failed: " + JSON.stringify(body))
+            if (body.sessionId !== sessionId) fail("measure echoed a different sessionId")
+            if (!body.title) fail("measure must carry the display title too")
+            const m = body.measurement
+            if (!m) fail("measure answered with no measurement")
+            for (const field of ["logRevision", "baseline", "surfaceDeltaTokens", "totalTokens",
+              "surfaceTokens", "eventCount", "nodeCount", "shadowPricing", "routePricedCount", "rows"]) {
+              if (m[field] === undefined || m[field] === null) fail("measurement is missing " + field)
+            }
+            if (!Array.isArray(m.rows) || m.rows.length !== m.nodeCount) fail("rows length must match nodeCount")
+            if (m.rows.length === 0) {
+              // A provider-free CI boot has no surface traffic, so the per-row
+              // contract below is unreachable here. M1 shipped a fabricated delta
+              // column behind exactly this silence: say it out loud instead.
+              if (m.shadowPricing !== "unknown") fail("an empty surface must report shadowPricing unknown, got " + m.shadowPricing)
+              console.log("::notice::0 surface nodes - per-row shape asserts skipped here; covered by test/http.test.js against a priced surface")
+            }
+            for (const row of m.rows) {
+              for (const field of ["seq", "tokens", "heuristicTokens", "priceDelta", "routePriced",
+                "type", "time", "surfaceOp", "preview"]) {
+                if (!(field in row)) fail("row #" + row.seq + " is missing " + field)
+              }
+              // Anti-fabrication: a host that does not emit the shadow price must
+              // yield nulls, never a delta that just equals tokens. Note the shape
+              // of the trap: `tokens - null` is `tokens`, so comparing the delta
+              // arithmetic alone lets a fabricated row through — the rule has to be
+              // read off the missing shadow price itself.
+              if (m.shadowPricing === "absent" && row.heuristicTokens !== null) fail("shadowPricing=absent but row #" + row.seq + " carries a shadow price")
+              if (m.shadowPricing === "available" && row.heuristicTokens === null) fail("shadowPricing=available but row #" + row.seq + " has no shadow price")
+              if (row.heuristicTokens === null && (row.priceDelta !== null || row.routePriced !== null)) fail("row #" + row.seq + " has no shadow price yet reports a delta or a priced flag")
+              if (row.priceDelta !== null && row.priceDelta !== (row.tokens - row.heuristicTokens)) fail("row #" + row.seq + " priceDelta does not match tokens - heuristicTokens")
+            }
+            console.log("measured live session " + sessionId + " (" + m.nodeCount + " surface nodes, shadowPricing=" + m.shadowPricing + ")")
+          ' "$measureFile" "$created"
           echo 'compat check passed'

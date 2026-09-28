@@ -3,32 +3,50 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.3.3 - 2026-09-28
+
+### Security
+
+- The host-side JSON reply and session id check come from `dsh-mini-utility-dock`'s `dsh-host-http` fragment, which sets `cache-control: no-store` once for every reply; a body naming ports, pids and session ids is not stored by an intermediary cache.
+- Browser authorization is one `authorizeBrowser(req, res)` call built by that fragment, so the admission order is stated once.
+- The route's 500 response returns a fixed `code`; the exception text goes to the host log.
+
+### Changed
+
+- The client tests render the bundle in a vm and assert the behaviour of a row or a panel rather than the contents of the source text.
+
+### Maintenance
+
+- Both workflows run on `pull_request`, the matrix drops `@latest` and adds Node 20, and the Linux and Windows cells assert the same measurement contract. Publishing splits into checks / npm / GitHub release jobs; only the release job holds a write token, and a tag must be an ancestor of `main`.
+- The npm package includes `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`; `package.json` declares an author; both READMEs lead their badge row with the compatibility CI badge.
+- The dock pin is 0.6.0 and all four embedded blocks re-synced; `http:check` covers the fourth block.
+
 ## 0.3.2 - 2026-09-25
 
 ### Changed
 
-- The sidebar Session row's hover card carries a `sidebar.session.row.hover` seat (`id: ballast`): one line of the occupancy facts already cached for that session, plus an entry that opens the panel on it. With nothing cached it shows no number and only the entry, so hovering causes no host work.
-- The panel entry becomes `dsh-mini-utility-dock`'s shared launcher fragment: one icon at the bottom-left opens a menu of the three panels; the page-local dock protocol and `dock:sync` / `dock:check` are retired.
+- The sidebar Session row's hover card carries a `sidebar.session.row.hover` seat (`id: ballast`): one line of the occupancy already cached for that session, plus an entry that opens the panel on it. With nothing cached it shows only the entry, so hovering reads nothing from the host.
+- The panel entry becomes `dsh-mini-utility-dock`'s shared launcher fragment: one icon at the bottom-left of the page opens a menu of panel entries. The page-local dock protocol and `dock:sync` / `dock:check` are retired.
 - Raise the minimum supported DSH version to `0.1.5-rc.3`; the compatibility matrix now pins this baseline and the 0.1.7 line.
-- Declare host compatibility: `peerDependencies` and `engines.dsh` both require `>=0.1.5-rc.3`, with the peer marked optional so npm never installs the host. The host's startup preflight disables a plugin whose peer does not match; declaring none left it with nothing to judge.
-- Fix the family launcher disappearing after a hot reload: synced from `dsh-mini-utility-dock` 0.5.1, whose claim is released with its owner so the other copies register again without a full page reload.
+- Declare host compatibility: `peerDependencies` and `engines.dsh` both require `>=0.1.5-rc.3`, with the peer marked optional so npm never installs the host. The host's startup preflight uses that declaration to decide whether to disable this plugin.
+- Fix the launcher icon disappearing after a hot reload, by syncing `dsh-mini-utility-dock` 0.5.1: its claim on the page is released with its owner, so the icon registers again without a full page reload.
 
 ## 0.3.0 - 2026-09-23
 
 ### Fixed
 
-- The meter bridge shape-checks the services it binds: a host injecting a tokenMeter without `measure` no longer reports `available` and then fails every request.
-- Shaping sits inside the same fence as measure: a throw used to escape as a 500 and take the host-wide view down with it.
+- The meter bridge shape-checks the services it binds: a host injecting a tokenMeter without `measure` now reports unavailable instead of `available` followed by a failing request every time.
+- Shaping sits inside the same fence as measure: a throw no longer escapes as a 500 and takes the host-wide view down with it.
 
 ### Changed
 
-- The declared minimum DSH version is now `>=0.1.2-rc.1` (was `>=0.1.2-alpha.2`; CI never covered the alpha line).
+- The declared minimum DSH version is now `>=0.1.2-rc.1`, the line the compatibility CI actually covers.
 
 ## 0.2.10 - 2026-09-17
 
 ### Changed
 
-- The session panel is smaller overall: width 520 → 440, height cap 680/78vh → 460/62vh. It used to be far larger than its content, covering most of the screen for a handful of entries.
+- The session panel is smaller overall: width 520 → 440, height cap 680/78vh → 460/62vh.
 
 ## 0.2.9 - 2026-09-17
 

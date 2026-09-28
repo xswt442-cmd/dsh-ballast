@@ -2,6 +2,7 @@
 
 [中文](./README.md) | [English](./README.en.md)
 
+[![ci](https://github.com/xswt442-cmd/dsh-ballast/actions/workflows/compat.yml/badge.svg?branch=main)](https://github.com/xswt442-cmd/dsh-ballast/actions/workflows/compat.yml)
 [![DSH](https://img.shields.io/static/v1?label=DSH&message=plugin&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-ballast?label=npm&color=4d6bfe)](https://www.npmjs.com/package/dsh-ballast)
 [![release](https://img.shields.io/github/v/release/xswt442-cmd/dsh-ballast?label=release&color=16a3a3)](https://github.com/xswt442-cmd/dsh-ballast/releases)
@@ -18,7 +19,7 @@ DSH Web 上下文窗口归因插件。它按消息条目显示当前 surface 的
 - 显示当前路由价格，并在 host 同时提供 heuristic 影子价时标出价差。价差只表示图像可能经过视觉 token 重定价，不表示异常或内容重要性。
 - 显示按消息类型聚合的 token 占比，以及当前 host 上各 live session 中最重的条目。
 - 显示 provider usage、下一次请求的窗口压力，以及 system/tools/messages 的估算构成；这些构成值与 provider 锚定值口径不同，不强行求和。
-- 列出当前 host 的 live session，并从页面左下的家族菜单（图标展开，三个面板同列）打开面板；标题缺失时回退到工作区目录名和 session ID。
+- 列出当前 host 的 live session，并从页面左下的 `dsh-mini-utility-dock` launcher 打开面板；标题缺失时回退到工作区目录名和 session ID。
 - 侧栏每个会话行的悬浮卡片也提供一行入口：显示插件已经取到的该会话占用（surface 总量与最重条目；只有会话列表时退到日志条数）和打开面板的按钮，点击后面板切到该会话。没有缓存时不显示数字，悬停本身不请求宿主。
 - 面板、入口图标和可访问名称跟随 DSH 的全局语言设置；旧 host 回退到浏览器语言。
 
@@ -35,7 +36,7 @@ npm install dsh-ballast
 dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 ```
 
-`npm install` 只下载 package，不会启用 DSH profile；在 DSH 中使用仍需将 bundle 加入 profile。安装后重启 DSH Web，并从页面左下的家族菜单打开 `ballast`。
+`npm install` 只下载 package，不会启用 DSH profile；在 DSH 中使用仍需将 bundle 加入 profile。安装后重启 DSH Web，并从页面左下的 `dsh-mini-utility-dock` launcher 打开 `ballast`。
 
 ## 使用
 
@@ -71,6 +72,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 npm test
 npm run docs:check
 Get-ChildItem lib/*.js | ForEach-Object { node --check $_.FullName }
+node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
 npm pack --dry-run
 ```
 

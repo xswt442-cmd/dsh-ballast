@@ -1,13 +1,34 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  VERSION, ballastGuard, isLoopbackAddress, isLoopbackName, hostHostname, optionalSessionId
+  VERSION, sendJson, ballastGuard, createBrowserAuthorizer, isLoopbackAddress, isLoopbackName, hostHostname, optionalSessionId
 } from '../lib/shared.js'
 import { readFileSync } from 'node:fs'
 
 test('VERSION matches package.json', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(VERSION, pkg.version)
+})
+
+// The marked blocks are the only copies of the shared host glue this plugin ships,
+// so a hand-written twin or a second pair of markers is a correctness problem
+// before it is a style one. `check` rewrites the block between one pair of markers
+// and says nothing about anything else — and it knows only the markers its pinned
+// dock version carries, so this assertion, not `check`, is what notices a block
+// missing or doubled.
+test('lib/shared.js embeds each dock fragment exactly once, in block order', () => {
+  const source = readFileSync(new URL('../lib/shared.js', import.meta.url), 'utf8')
+  const lines = source.split(/\r?\n/)
+  const names = ['dsh-loopback-helpers', 'dsh-host-guard', 'dsh-host-http']
+  for (const name of names) {
+    assert.equal(lines.filter((line) => line.trim() === `// <${name}>`).length, 1,
+      `exactly one opening marker for ${name}`)
+    assert.equal(lines.filter((line) => line.trim() === `// </${name}>`).length, 1,
+      `exactly one closing marker for ${name}`)
+  }
+  const starts = names.map((name) => lines.findIndex((line) => line.trim() === `// <${name}>`))
+  assert.deepEqual(starts, [...starts].sort((a, b) => a - b),
+    'the guard reads the predicates the loopback block declares, and the HTTP glue lands below both')
 })
 
 function mockRes() {
@@ -127,12 +148,11 @@ test('guard admits only exact loopback hosts and matching Origins', () => {
   }
 })
 
-// Regression: consumers of the generated guard block used to disagree on the
-// IPv4-mapped IPv6 form. Ballast rejected `[::ffff:127.0.0.1]:3080` while
-// another copy accepted it, which is exactly the drift the parity bin exists to
-// exists to catch. The form is loopback and must be admitted in both spellings —
-// a dual-stack browser reaches the panel that way, and the WHATWG URL parser
-// rewrites the dotted form to hex in an Origin.
+// Regression: while the guard was hand-maintained in this file the IPv4-mapped
+// IPv6 form drifted — this plugin rejected `[::ffff:127.0.0.1]:3080` on the Origin
+// path while the Host path accepted it. The form is loopback and must be admitted
+// in both spellings — a dual-stack browser reaches the panel that way, and the
+// WHATWG URL parser rewrites the dotted form to hex in an Origin.
 test('guard treats the IPv4-mapped IPv6 loopback form as loopback', () => {
   const guard = ballastGuard({ currentPort: () => 3080 })
   for (const host of ['[::ffff:127.0.0.1]:3080', '[::ffff:7f00:1]:3080']) {
@@ -192,4 +212,31 @@ test('optionalSessionId trims and bounds input', () => {
   assert.equal(optionalSessionId(''), null)
   assert.equal(optionalSessionId(42), null)
   assert.equal(optionalSessionId('x'.repeat(513)), null)
+})
+
+// `sendJson` is the embedded glue rather than a local helper now, so the header it
+// adds is asserted here: every route reply names live host facts (port, pid,
+// session ids), and that is what makes `no-store` a posture and not cosmetics.
+test('every JSON reply carries the no-store and JSON content policy', () => {
+  const res = mockRes()
+  sendJson(res, 200, { ok: true })
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['content-type'], 'application/json; charset=utf-8')
+  assert.equal(res.headers['cache-control'], 'no-store')
+  assert.deepEqual(JSON.parse(res.body), { ok: true })
+})
+
+// The authorizer reaches the Connection through accessors, because a captured value
+// keeps authorizing against a Connection the host has already disposed. The
+// constructor refusing a plain value is the only thing that catches that mistake
+// before a reload does.
+test('the browser authorizer refuses a captured Connection and a missing guard', () => {
+  const guard = ballastGuard()
+  assert.throws(() => createBrowserAuthorizer({ getConnection: null, getConnectionSeen: () => false, guard }),
+    /getConnection must be an accessor/)
+  assert.throws(() => createBrowserAuthorizer({ getConnection: () => null, getConnectionSeen: false, guard }),
+    /getConnectionSeen must be an accessor/)
+  assert.throws(() => createBrowserAuthorizer({ getConnection: () => null, getConnectionSeen: () => false }),
+    /guard is required/)
+  assert.equal(typeof createBrowserAuthorizer({ getConnection: () => null, getConnectionSeen: () => false, guard }), 'function')
 })

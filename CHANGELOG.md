@@ -3,32 +3,50 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.3.3 - 2026-09-28
+
+### 安全
+
+- 主机侧 JSON 应答与会话 id 校验由 `dsh-mini-utility-dock` 的 `dsh-host-http` 片段提供，`cache-control: no-store` 由片段统一设置；含端口、PID 与 session id 的响应体不可被中间缓存保存。
+- 浏览器请求授权由片段构造的 `authorizeBrowser(req, res)` 承担，准入判定顺序只保留一处。
+- 路由的 500 响应只返回固定 `code`，异常文本写入宿主日志。
+
+### 变更
+
+- 客户端测试改为实际渲染：在 vm 中启动 bundle 并渲染其注册的界面，断言行与面板的行为而非源码文本。
+
+### 维护
+
+- 兼容与发布工作流新增 `pull_request` 触发，矩阵去掉 `@latest` 并补上 Node 20，Linux 与 Windows 格断言同一套 measurement 契约。发布拆为 checks / npm / GitHub release 三个 job，仅创建 release 的 job 持有写权限，且 tag 必须是 `main` 的祖先。
+- npm 包加入 `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`；`package.json` 声明 author；两份 README 的徽章行首位为兼容 CI 徽章。
+- `dsh-mini-utility-dock` pin 升至 0.6.0，四个嵌入块重新 sync；`http:check` 覆盖第四个块。
+
 ## 0.3.2 - 2026-09-25
 
 ### 变更
 
-- 侧栏会话行悬浮卡片新增 `sidebar.session.row.hover` 席位（`id: ballast`）：一行显示该会话已缓存的占用事实，并提供打开面板并切到该会话的入口；没有缓存时不显示数字、只留入口，因此悬停不产生宿主请求。
-- 面板入口改用 `dsh-mini-utility-dock` 的共享 launcher 片段：左下角一个图标，点开是列出三个面板的菜单；页面级 dock 协议与 `dock:sync` / `dock:check` 退役。
+- 侧栏会话行的悬浮卡片新增 `sidebar.session.row.hover` 席位（`id: ballast`）：一行显示该会话已缓存的占用，并给出打开面板、切到该会话的入口；没有缓存时只留入口，悬停本身不请求宿主。
+- 面板入口改用 `dsh-mini-utility-dock` 的共享 launcher 片段：页面左下角一个图标，点开是列出各面板入口的菜单。页面级 dock 协议与 `dock:sync` / `dock:check` 退役。
 - 最低支持 DSH 版本提高到 `0.1.5-rc.3`；兼容矩阵改为固定检查该基线与 0.1.7 线。
-- 声明对宿主的兼容性：`peerDependencies` 与 `engines.dsh` 都要求 `>=0.1.5-rc.3`，peer 标 optional 以免 npm 去装宿主。宿主启动预检不满足时会禁用本插件，此前没有声明就无从判断。
-- 修复热重载后族图标消失：launcher 归属随 `dsh-mini-utility-dock` 0.5.1 改为可释放的认领，owner 销毁即唤醒其余副本注册，不再需要刷新整页。
+- 声明对宿主的兼容性：`peerDependencies` 与 `engines.dsh` 都要求 `>=0.1.5-rc.3`，peer 标 optional 以免 npm 去装宿主。宿主启动预检据此决定是否禁用本插件。
+- 修复热重载后左下角 launcher 图标消失：同步 `dsh-mini-utility-dock` 0.5.1，页面上的认领随 owner 一起释放，重载后图标重新注册，不必刷新整页。
 
 ## 0.3.0 - 2026-09-23
 
 ### 修复
 
-- meter 绑定服务时做形状校验：宿主注入一个缺 `measure` 的 tokenMeter 时，可用性不再谎报 `available` 然后每个请求都失败。
-- measure 之后的 shaping 收进同一围栏：此前抛错会穿透成 500，并连带让 host 级视图读不出来。
+- meter 绑定服务时校验形状：宿主注入一个缺少 `measure` 的 tokenMeter 时报不可用，而不是每个请求都失败。
+- measure 之后的 shaping 收进同一围栏：抛错不再穿透成 500，也不再连带让 host 级视图读不出来。
 
 ### 变更
 
-- README 声明的最低 DSH 版本改为 `>=0.1.2-rc.1`（原 `>=0.1.2-alpha.2`；CI 从未覆盖 alpha 线）。
+- README 声明的最低 DSH 版本改为 `>=0.1.2-rc.1`，与 CI 实际覆盖的那条线一致。
 
 ## 0.2.10 - 2026-09-17
 
 ### 变更
 
-- 会话面板整体缩小：宽度 520 → 440，高度上限 680/78vh → 460/62vh。面板此前比内容大出太多，只显示几条条目时也占掉大半屏。
+- 会话面板整体缩小：宽度 520 → 440，高度上限 680/78vh → 460/62vh。
 
 ## 0.2.9 - 2026-09-17
 

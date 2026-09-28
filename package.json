@@ -1,21 +1,23 @@
 {
   "name": "dsh-ballast",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "DSH Web 上下文窗口归因面板：通过 host token meter 按消息显示当前 surface 的 token 占用与摘要。Read-only per-message context-window attribution for DSH Web using the host token meter.",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "test": "npm run launcher:check && npm run guard:check && npm run loopback:check && node --test test/*.test.js",
+    "test": "npm run http:check && npm run launcher:check && npm run guard:check && npm run loopback:check && node --test test/*.test.js",
     "launcher:sync": "dsh-mini-utility-dock sync lib/client.js",
     "launcher:check": "dsh-mini-utility-dock check lib/client.js",
     "loopback:sync": "dsh-mini-utility-dock sync lib/shared.js",
     "guard:sync": "dsh-mini-utility-dock sync lib/shared.js",
+    "http:sync": "dsh-mini-utility-dock sync lib/shared.js",
     "loopback:check": "dsh-mini-utility-dock check lib/shared.js",
     "guard:check": "dsh-mini-utility-dock check lib/shared.js",
+    "http:check": "dsh-mini-utility-dock check lib/shared.js",
     "docs:check": "dsh-plugin-docs"
   },
   "devDependencies": {
-    "dsh-mini-utility-dock": "0.5.1"
+    "dsh-mini-utility-dock": "0.6.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh": ">=0.1.5-rc.3"
@@ -43,6 +45,7 @@
     "type": "git",
     "url": "git+https://github.com/xswt442-cmd/dsh-ballast.git"
   },
+  "author": "xswt442-cmd",
   "homepage": "https://github.com/xswt442-cmd/dsh-ballast#readme",
   "bugs": {
     "url": "https://github.com/xswt442-cmd/dsh-ballast/issues"
@@ -60,7 +63,10 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "README.en.md"
+    "README.en.md",
+    "CHANGELOG.md",
+    "CHANGELOG.en.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20",

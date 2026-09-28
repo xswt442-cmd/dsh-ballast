@@ -54,6 +54,10 @@ async function mount(nodes, { connection } = {}) {
   const broken = brokenSession()
   const routes = new Map()
   const disposed = []
+  // The connection scope's own teardown: firing it is how a test reaches the
+  // state an RC1 service reload leaves behind, where `connection` is null again
+  // but the host has already had one.
+  const scopeDisposed = []
   const ctx = {
     webServer: {
       port: 0,
@@ -65,6 +69,9 @@ async function mount(nodes, { connection } = {}) {
     inject(_names, cb) {
       cb({
         connection,
+        on(event, fn) {
+          if (event === 'dispose') scopeDisposed.push(fn)
+        },
         tokenMeter: {
           measure(target) {
             if (target === broken) throw new Error('step event seq mismatch')
@@ -112,6 +119,11 @@ async function mount(nodes, { connection } = {}) {
     // The route object itself, for the one case a real socket cannot stage: a
     // peer that is not on this machine.
     route: () => routes.get('/dsh-ballast/api'),
+    // Simulate the service going away the way a reload does, leaving the
+    // "this host has had a Connection" latch set.
+    unloadConnection: async () => {
+      for (const fn of scopeDisposed) await fn()
+    },
     dispose: async () => {
       for (const fn of disposed) await fn()
       server.close()
@@ -157,6 +169,80 @@ test('RC1 Connection acceptance replaces the legacy loopback header fence', asyn
   assert.equal(calls, 1)
 })
 
+test('a Connection rejection that is not 401 reads as forbidden', async (t) => {
+  const host = await mount(SURFACE.nodes, {
+    connection: { requestRejection: () => 403 }
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=sessions'))
+  assert.equal(res.status, 403)
+  assert.equal(res.body.code, 'forbidden')
+})
+
+// The reload gap is the case a weaker fence must never fill. Once this host has
+// had an RC1 Connection, the Connection is the boundary, so a request arriving
+// while the service is unloaded is answered 503 — falling through to the loopback
+// guard would serve sessions to a browser whose authentication is exactly what the
+// reload dropped.
+test('a Connection reload gap answers 503 and never reaches the loopback guard', async (t) => {
+  const host = await mount(SURFACE.nodes, {
+    connection: { requestRejection: () => undefined }
+  })
+  t.after(() => host.dispose())
+
+  assert.equal((await send(host.url('?action=sessions'))).status, 200)
+
+  await host.unloadConnection()
+  // The Origin below is one the guard rejects with 403. Reading 503 instead is the
+  // proof the guard was never consulted, not merely that the route stayed shut.
+  const gap = await send(host.url('?action=sessions'), { origin: 'https://evil.example' })
+  assert.equal(gap.status, 503)
+  assert.equal(gap.body.code, 'connection_unavailable')
+  for (const field of ['sessions', 'measurement', 'availability', 'pid']) {
+    assert.ok(!(field in gap.body), `the gap reply leaks ${field}`)
+  }
+})
+
+// The route's outer fence is the last thing between a host-side throw and the
+// browser. It answers a code, and the message it cannot classify goes to the log
+// only: an exception text can name a path, a service field or an upstream status.
+test('an unexpected failure answers a fixed code and logs the message', async (t) => {
+  const host = await mount(SURFACE.nodes)
+  t.after(() => host.dispose())
+
+  const chunks = []
+  let status = null
+  const res = {
+    writeHead(code) { status = code },
+    setHeader() {},
+    end(text) { if (text) chunks.push(text) }
+  }
+  const logged = []
+  const originalError = console.error
+  console.error = (...args) => logged.push(args.join(' '))
+  try {
+    // A request line the URL parser cannot read, past the guard and the method
+    // gate — the shape that used to put the parser's message in the reply body.
+    await host.route().handler({
+      method: 'GET',
+      url: 'http://[',
+      headers: { host: `127.0.0.1:${host.port}` },
+      socket: { remoteAddress: '127.0.0.1' }
+    }, res)
+  } finally {
+    console.error = originalError
+  }
+
+  assert.equal(status, 500)
+  const body = JSON.parse(chunks.join(''))
+  assert.equal(body.ok, false)
+  assert.equal(body.code, 'error')
+  assert.ok(!('error' in body), 'the reply carries an error field')
+  assert.ok(!/invalid url|TypeError/i.test(JSON.stringify(body)), 'the reply leaks the exception text')
+  assert.ok(logged.some((line) => /invalid url|TypeError/i.test(line)), 'the message never reached the log')
+})
+
 /** Raw request so Host can be overridden — fetch() would normalise it away. */
 function send(url, headers = {}, method = 'GET') {
   return new Promise((resolve, reject) => {
@@ -193,6 +279,10 @@ test('the guard rejects cross-site, foreign origin and rebound host, admits loop
 
   const open = await send(host.url('?action=sessions'))
   assert.equal(open.status, 200)
+  // The reply policy comes from the embedded `dsh-host-http` fragment: a body
+  // naming ports, pids and session ids must never be servable from a cache.
+  assert.equal(open.headers['cache-control'], 'no-store')
+  assert.match(open.headers['content-type'], /^application\/json; charset=utf-8$/)
   assert.equal(open.body.availability, 'available')
   assert.equal(open.body.sessions[0].sessionId, 'sess-http-1')
   assert.equal(open.body.sessions[0].title, 'dsh-ballast')
