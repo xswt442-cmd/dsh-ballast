@@ -20,6 +20,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 - CI and publishing are tightened together: both workflows also run on `pull_request`, the matrix drops `@latest` and adds Node 20, the Linux boot check asserts the Windows measurement contract, and a failed boot strips launch-token lines from the echoed host log. Publishing splits into checks / npm / release: only the release job holds a write token, and a tag must be an ancestor of `main`.
 - The npm package now ships `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`, `package.json` declares an author, and both READMEs lead their badge row with the compatibility CI badge.
 
+- The dock pin rises to 0.6.0 and all four embedded blocks re-sync (the fragments' comment text changed with it), so `http:check` compares the fourth block for real.
 ## 0.3.2 - 2026-09-25
 
 ### Changed
