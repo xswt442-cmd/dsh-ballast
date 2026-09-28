@@ -2,6 +2,7 @@
 
 [中文](./README.md) | [English](./README.en.md)
 
+[![ci](https://github.com/xswt442-cmd/dsh-ballast/actions/workflows/compat.yml/badge.svg?branch=main)](https://github.com/xswt442-cmd/dsh-ballast/actions/workflows/compat.yml)
 [![DSH](https://img.shields.io/static/v1?label=DSH&message=plugin&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-ballast?label=npm&color=4d6bfe)](https://www.npmjs.com/package/dsh-ballast)
 [![release](https://img.shields.io/github/v/release/xswt442-cmd/dsh-ballast?label=release&color=16a3a3)](https://github.com/xswt442-cmd/dsh-ballast/releases)
@@ -18,7 +19,7 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 - Show the current route price and, when the host supplies a heuristic shadow price, mark the difference. A difference only indicates that an image may have been repriced as visual tokens; it is not an anomaly or an importance score.
 - Show token share aggregated by message type and the heaviest entry in each live session on the current host.
 - Show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and provider-anchored pressure use different accounting bases and are not forced to sum.
-- List live sessions on the current host and open the panel from the family menu at the bottom-left of the work area (one icon, three panels); when a title is missing, fall back to the workspace basename and session ID.
+- List live sessions on the current host and open the panel from the `dsh-mini-utility-dock` launcher at the bottom-left; when a title is missing, fall back to the workspace basename and session ID.
 - Every Sidebar Session row's hover card also carries one ballast line: the occupancy the plugin has already read for that session (its surface total and heaviest entry, or the log length when only the session list has been read) plus a button that opens the panel on that session. With nothing cached it prints no number, and hovering itself reads nothing from the host.
 - Follow DSH's global language setting across the panel, the launcher icon, and accessible labels; older hosts fall back to the browser language.
 
@@ -35,7 +36,7 @@ npm install dsh-ballast
 dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 ```
 
-`npm install` downloads the package only; it does not enable the DSH profile. To use the plugin in DSH, add its bundle to a profile. Restart DSH Web after installation and open `ballast` from the family menu at the bottom-left of the work area.
+`npm install` downloads the package only; it does not enable the DSH profile. To use the plugin in DSH, add its bundle to a profile. Restart DSH Web after installation and open `ballast` from the `dsh-mini-utility-dock` launcher at the bottom-left of the work area.
 
 ## Usage
 
@@ -71,6 +72,7 @@ Do not symlink the development repository into a running DSH profile: HMR can lo
 npm test
 npm run docs:check
 Get-ChildItem lib/*.js | ForEach-Object { node --check $_.FullName }
+node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
 npm pack --dry-run
 ```
 
