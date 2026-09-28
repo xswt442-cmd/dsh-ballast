@@ -11,7 +11,7 @@ commit into `main`. Only release-ready changes belong on `main`.
    - the first section of both changelogs, as `## X.Y.Z - YYYY-MM-DD`
 
    Keep that heading format: `scripts/release-notes.mjs` cuts the GitHub release
-   notes from the matching `CHANGELOG.md` section, and no match means empty notes.
+   notes from the matching `docs/CHANGELOG.md` section, and no match means empty notes.
    Confirm it finds the section:
 
    ```sh

@@ -10,7 +10,7 @@ test('both CHANGELOGs contain the version being shipped', () => {
   // matches PKG_VERSION, so an `## Unreleased` section above it is harmless.
   // What actually breaks releases is no matching section at all -> empty notes.
   const heading = new RegExp(`^## ${VERSION.replace(/\./g, '\\.')}(\\s|$)`)
-  for (const file of ['../CHANGELOG.md', '../CHANGELOG.en.md']) {
+  for (const file of ['../docs/CHANGELOG.md', '../docs/CHANGELOG.en.md']) {
     const sections = read(file).split(/\r?\n/).filter((line) => line.startsWith('## '))
     assert.ok(
       sections.some((line) => heading.test(line)),
