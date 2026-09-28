@@ -7,20 +7,20 @@ Release notes 由对应版本段生成；最新版本在前。
 
 ### 安全
 
-- 主机侧的 JSON 应答与会话 id 校验改用 `dsh-mini-utility-dock` 的 `dsh-host-http` 片段，`cache-control: no-store` 从此由片段统一给出：说端口、pid 与 session id 的应答不会再被中间缓存留下。
-- 路由的浏览器授权收进片段构造的 `authorizeBrowser(req, res)`，一次调用问完；判定顺序只在片段里写一处。
-- 路由兜底的 500 不再把原始异常文本写进响应体：只回固定的 `code`，异常内容改记宿主日志。
+- 主机侧 JSON 应答与会话 id 校验由 `dsh-mini-utility-dock` 的 `dsh-host-http` 片段提供，`cache-control: no-store` 由片段统一设置；含端口、PID 与 session id 的响应体不可被中间缓存保存。
+- 浏览器请求授权由片段构造的 `authorizeBrowser(req, res)` 承担，准入判定顺序只保留一处。
+- 路由的 500 响应只返回固定 `code`，异常文本写入宿主日志。
 
 ### 变更
 
-- 客户端测试改为真渲染：在 vm 里启动真实 bundle 并渲染它注册的席位，断言一行或一个面板做什么，而不是源码文本里出现了什么。
+- 客户端测试改为实际渲染：在 vm 中启动 bundle 并渲染其注册的界面，断言行与面板的行为而非源码文本。
 
 ### 维护
 
-- 兼容与发布工作流收敛：两者新增 `pull_request` 触发，矩阵去掉 `@latest` 并补上 Node 20，Linux 格与 Windows 格断言同一套 measurement 契约，启动失败时回显的宿主日志滤去带 launch token 的行。发布拆成 checks / npm / GitHub release 三个 job，只有建 release 的那个持写 token，且 tag 必须是 `main` 的祖先。
-- npm 包内容补上 `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`，`package.json` 声明 author，两份 README 的徽章行最前面放兼容 CI 徽章。
+- 兼容与发布工作流新增 `pull_request` 触发，矩阵去掉 `@latest` 并补上 Node 20，Linux 与 Windows 格断言同一套 measurement 契约。发布拆为 checks / npm / GitHub release 三个 job，仅创建 release 的 job 持有写权限，且 tag 必须是 `main` 的祖先。
+- npm 包加入 `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`；`package.json` 声明 author；两份 README 的徽章行首位为兼容 CI 徽章。
+- `dsh-mini-utility-dock` pin 升至 0.6.0，四个嵌入块重新 sync；`http:check` 覆盖第四个块。
 
-- dock pin 抬到 0.6.0，四个嵌入块重新 sync（片段注释文本随之更新）；`http:check` 自此真的比对第四块。
 ## 0.3.2 - 2026-09-25
 
 ### 变更

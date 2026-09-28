@@ -7,20 +7,20 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Security
 
-- The host-side JSON reply and session id check now come from `dsh-mini-utility-dock`'s `dsh-host-http` fragment, so `cache-control: no-store` is given once for every reply: a body naming ports, pids and session ids can no longer be held by an intermediary cache.
-- Browser authorization is now one call, `authorizeBrowser(req, res)`, built by that fragment; the order it decides in is stated once, in the fragment.
-- The route's fallback 500 no longer puts raw exception text in the body. It states a fixed `code`, and the message goes to the host log.
+- The host-side JSON reply and session id check come from `dsh-mini-utility-dock`'s `dsh-host-http` fragment, which sets `cache-control: no-store` once for every reply; a body naming ports, pids and session ids is not stored by an intermediary cache.
+- Browser authorization is one `authorizeBrowser(req, res)` call built by that fragment, so the admission order is stated once.
+- The route's 500 response returns a fixed `code`; the exception text goes to the host log.
 
 ### Changed
 
-- The client tests render instead of grepping: the real bundle is booted in a vm and its seats rendered, so a test asserts what a row or a panel does rather than what the source text contains.
+- The client tests render the bundle in a vm and assert the behaviour of a row or a panel rather than the contents of the source text.
 
 ### Maintenance
 
-- CI and publishing are tightened together: both workflows also run on `pull_request`, the matrix drops `@latest` and adds Node 20, the Linux boot check asserts the Windows measurement contract, and a failed boot strips launch-token lines from the echoed host log. Publishing splits into checks / npm / release: only the release job holds a write token, and a tag must be an ancestor of `main`.
-- The npm package now ships `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`, `package.json` declares an author, and both READMEs lead their badge row with the compatibility CI badge.
+- Both workflows run on `pull_request`, the matrix drops `@latest` and adds Node 20, and the Linux and Windows cells assert the same measurement contract. Publishing splits into checks / npm / GitHub release jobs; only the release job holds a write token, and a tag must be an ancestor of `main`.
+- The npm package includes `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`; `package.json` declares an author; both READMEs lead their badge row with the compatibility CI badge.
+- The dock pin is 0.6.0 and all four embedded blocks re-synced; `http:check` covers the fourth block.
 
-- The dock pin rises to 0.6.0 and all four embedded blocks re-sync (the fragments' comment text changed with it), so `http:check` compares the fourth block for real.
 ## 0.3.2 - 2026-09-25
 
 ### Changed
