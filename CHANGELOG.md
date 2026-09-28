@@ -20,6 +20,7 @@ Release notes 由对应版本段生成；最新版本在前。
 - 兼容与发布工作流收敛：两者新增 `pull_request` 触发，矩阵去掉 `@latest` 并补上 Node 20，Linux 格与 Windows 格断言同一套 measurement 契约，启动失败时回显的宿主日志滤去带 launch token 的行。发布拆成 checks / npm / GitHub release 三个 job，只有建 release 的那个持写 token，且 tag 必须是 `main` 的祖先。
 - npm 包内容补上 `CHANGELOG.md` / `CHANGELOG.en.md` / `LICENSE`，`package.json` 声明 author，两份 README 的徽章行最前面放兼容 CI 徽章。
 
+- dock pin 抬到 0.6.0，四个嵌入块重新 sync（片段注释文本随之更新）；`http:check` 自此真的比对第四块。
 ## 0.3.2 - 2026-09-25
 
 ### 变更
