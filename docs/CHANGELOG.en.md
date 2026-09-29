@@ -3,6 +3,16 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.3.5 - 2026-09-29
+
+### Changed
+
+- The README's opening paragraph states the split against the built-in context display: per-entry attribution, the heaviest entries, and comparison across live sessions come from this plugin.
+
+### Maintenance
+
+- Compatibility verification covers `0.2.0-rc.1`: one real boot on Windows and one on Linux.
+
 ## 0.3.4 - 2026-09-29
 
 ### Changed

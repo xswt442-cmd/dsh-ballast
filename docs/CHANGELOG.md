@@ -3,6 +3,16 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.3.5 - 2026-09-29
+
+### 变更
+
+- README 首段写明与内置上下文显示的分工：逐条归因、最重条目与跨 live session 比较由本插件提供。
+
+### 维护
+
+- 兼容性验证覆盖 `0.2.0-rc.1`：Windows 与 Linux 各执行一次真实 boot。
+
 ## 0.3.4 - 2026-09-29
 
 ### 变更
