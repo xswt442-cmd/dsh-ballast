@@ -95,7 +95,8 @@ jobs:
         # when it means something. The host line is adopted on purpose instead:
         # raise `engines.dsh`, the peer and the README badge together, and this
         # matrix pins the new line as its floor.
-        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2']
+        # 0.2.0-rc.1 is the newest anchor: the plugin-facing APIs this plugin reads are unchanged since 0.1.7-rc.2.
+        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2', '@0.2.0-rc.1']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
