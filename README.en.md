@@ -11,7 +11,7 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-ballast?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-ballast)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-A DSH Web context-window attribution plugin. It shows token occupancy and content previews for each entry on the current surface, helping identify what fills the window. It is read-only: it does not estimate spend, modify sessions, or trigger compaction.
+A DSH Web context-window attribution plugin. It shows token occupancy and content previews for each entry on the current surface to identify what fills the window. DSH's built-in context display gives a whole-window share; per-entry attribution, the heaviest entries, and comparison across live sessions come from this plugin. It is read-only and does not estimate spend, modify sessions, or trigger compaction.
 
 ## Features
 
