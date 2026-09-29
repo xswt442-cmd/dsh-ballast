@@ -149,14 +149,14 @@ test('a Connection that cannot answer is treated as unavailable, not as permissi
   })
   t.after(() => host.dispose())
 
-  // A throw here used to fall through to the route handler, which then answered
-  // a request no guard had cleared.
+  // A throwing connection service leaves the request unauthorized: the gate
+  // answers 503 itself, and the route handler is never reached.
   const res = await send(host.url('?action=sessions'))
   assert.equal(res.status, 503)
   assert.equal(res.body.code, 'connection_unavailable')
 })
 
-test('RC1 Connection acceptance replaces the legacy loopback header fence', async (t) => {
+test('a Connection that returns no rejection admits the request and the route answers 200', async (t) => {
   let calls = 0
   const host = await mount(SURFACE.nodes, {
     connection: { requestRejection: () => { calls += 1; return undefined } }
@@ -223,7 +223,7 @@ test('an unexpected failure answers a fixed code and logs the message', async (t
   console.error = (...args) => logged.push(args.join(' '))
   try {
     // A request line the URL parser cannot read, past the guard and the method
-    // gate — the shape that used to put the parser's message in the reply body.
+    // gate — the reply carries a fixed `code`, never the parser's message.
     await host.route().handler({
       method: 'GET',
       url: 'http://[',
@@ -371,8 +371,8 @@ test('a priced surface yields heaviest-first rows with a real delta per row', as
 })
 
 test('a host without the shadow price answers nulls over HTTP, never delta === tokens', async (t) => {
-  // Exactly what rc.2 sends: nodes carry `tokens` only. Coercing the missing
-  // field to 0 used to make every row look route-priced with delta === tokens.
+  // Exactly what rc.2 sends: nodes carry `tokens` only, and the absent shadow
+  // price stays null, so no row reads as route-priced with delta === tokens.
   const host = await mount(SURFACE.nodes.map(({ seq, tokens }) => ({ seq, tokens })))
   t.after(() => host.dispose())
 
@@ -389,8 +389,8 @@ test('a host without the shadow price answers nulls over HTTP, never delta === t
 })
 
 test('a node whose price cannot be read is absence, not a measured zero', async (t) => {
-  // `Number(node.tokens) || 0` used to turn a missing field into 0 — a legal
-  // reading that then entered the totals, the sort and the bar widths.
+  // A node with no readable price is absence: `tokens` stays null and is kept
+  // out of the totals, the sort and the bar widths, where a 0 would be a price.
   const host = await mount([
     { seq: 0, tokens: 15, heuristicTokens: 15 },
     { seq: 1, heuristicTokens: 55 },
