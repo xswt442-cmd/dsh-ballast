@@ -3,6 +3,12 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.3.6 - 2026-09-29
+
+### Maintenance
+
+- No behaviour changed: the client tests now render on the `react` 18 and `react-dom/client` the host ships, with the DOM supplied by `happy-dom`; the assertions and the test count are unchanged, and the explanatory text in `lib/` and `test/` describes current behaviour.
+
 ## 0.3.5 - 2026-09-29
 
 ### Changed

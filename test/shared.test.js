@@ -72,7 +72,7 @@ test('isLoopbackAddress admits loopback peers and fails closed otherwise', () =>
 test('guard rejects a non-loopback peer whatever headers it sends', () => {
   const guard = ballastGuard({ currentPort: () => 3080 })
   // DSH can listen on 0.0.0.0, and a remote client writes its own Host. These
-  // are the three shapes that used to read as local.
+  // are the three shapes the headers alone would read as local.
   for (const headers of [
     { host: '127.0.0.1:3080' },
     { host: 'localhost:3080', origin: 'http://localhost:3080', 'sec-fetch-site': 'same-origin' },
@@ -148,11 +148,11 @@ test('guard admits only exact loopback hosts and matching Origins', () => {
   }
 })
 
-// Regression: while the guard was hand-maintained in this file the IPv4-mapped
-// IPv6 form drifted — this plugin rejected `[::ffff:127.0.0.1]:3080` on the Origin
-// path while the Host path accepted it. The form is loopback and must be admitted
-// in both spellings — a dual-stack browser reaches the panel that way, and the
-// WHATWG URL parser rewrites the dotted form to hex in an Origin.
+// A dual-stack browser reaches the panel through the IPv4-mapped IPv6 form, so
+// the shared guard admits both spellings of loopback in it — the dotted
+// `[::ffff:127.0.0.1]` and the `[::ffff:7f00:1]` the WHATWG URL parser emits —
+// through `isLoopbackName`, which the Host and the Origin check share. Folding
+// to IPv4 first keeps a mapped public address, like `[::ffff:8.8.8.8]`, denied.
 test('guard treats the IPv4-mapped IPv6 loopback form as loopback', () => {
   const guard = ballastGuard({ currentPort: () => 3080 })
   for (const host of ['[::ffff:127.0.0.1]:3080', '[::ffff:7f00:1]:3080']) {
@@ -167,7 +167,7 @@ test('guard treats the IPv4-mapped IPv6 loopback form as loopback', () => {
   }
 })
 
-// Regression: an empty hostname parse must fail closed. `hostHostname` splits an
+// An empty hostname parse must fail closed. `hostHostname` splits an
 // unbracketed IPv6 literal at the first colon and returns '', and a bare
 // truthiness test would skip the allowlist entirely. RFC 7230 forbids the form
 // but a client can still send it, so it is denied rather than waved through.

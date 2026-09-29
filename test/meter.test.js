@@ -464,8 +464,8 @@ test('an empty aggregate reports nothing instead of dividing by zero', () => {
 })
 
 test('two derivations over one session do not overwrite each other', () => {
-  // One memo slot per session used to return the cached title where the
-  // tool-name map was expected, which silently loses the `[bash]` prefix.
+  // A single memo slot per session hands back the cached title where the
+  // tool-name map belongs, which silently loses the `[bash]` prefix.
   const session = { id: 'session-memo', header: { cwd: '/home/dev/app' }, events: liveSession.events }
   assert.ok(resolveSessionTitle(session).title)
   const out = shapeMeasurement(

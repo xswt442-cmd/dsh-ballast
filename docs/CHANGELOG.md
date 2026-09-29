@@ -3,6 +3,12 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.3.6 - 2026-09-29
+
+### 维护
+
+- 无行为变更：客户端测试改在宿主实际使用的 `react` 18 与 `react-dom/client` 上渲染，DOM 由 `happy-dom` 提供，断言与用例数量不变；`lib/` 与 `test/` 中的说明文字描述当前行为。
+
 ## 0.3.5 - 2026-09-29
 
 ### 变更

@@ -277,17 +277,17 @@ test('a refresh runs under one generation and honours the newest target', () => 
   // belongs to the same intent, so one stamp covers both.
   assert.match(REFRESH_SRC, /const gen = \+\+generation\.current/, 'refresh must stamp a generation')
   assert.match(REFRESH_SRC, /gen !== generation\.current/, 'refresh must drop a superseded answer')
-  // Reading the captured state was the bug: a session picked while the read was
-  // in flight got overwritten by the selection the closure started with.
+  // The refresh reads the live state through `stateRef`, never the state its
+  // closure captured: a session picked mid-read would be lost to the older one.
   assert.ok(!/state\.selected/.test(REFRESH_SRC), 'refresh must not trust the captured selection')
   assert.ok(!/state\.view/.test(REFRESH_SRC), 'refresh must not trust the captured view')
   assert.match(REFRESH_SRC, /stateRef\.current/, 'refresh must read the newest selection and view')
   assert.match(REFRESH_SRC, /\}, \[loadMeasure, loadTop\]\)/,
-    'refresh no longer depends on the captured selection or view')
+    'refresh must depend only on its loaders')
   // `loading` disables the refresh button, so it has to be released — but only
   // by the refresh that owns it. Closing and reopening the panel starts a
   // second refresh; the first one returning late must not hand back a spinner
-  // the newer read is still holding (REVIEW-0904 P2).
+  // the newer read is still holding.
   assert.match(REFRESH_SRC, /loadingOwner\.current = gen/, 'a refresh takes ownership of the spinner')
   assert.ok(!/loading: false/.test(REFRESH_SRC),
     'refresh must not clear loading inline; ownership decides who may')
@@ -296,8 +296,8 @@ test('a refresh runs under one generation and honours the newest target', () => 
 })
 
 test('a refresh releases the spinner only while it owns it', () => {
-  // A superseded refresh used to clear `loading` unconditionally, so a stale
-  // read re-enabled the button while a newer one was still in flight.
+  // Only the refresh that owns `loading` may clear it: a stale read must not
+  // re-enable the button while a newer one is still in flight.
   const owner = { current: 7 }
   assert.deepEqual(view.releaseLoading(owner, 7), { loading: false })
   assert.equal(owner.current, 0, 'releasing hands ownership back')
@@ -313,7 +313,7 @@ test('a refresh releases the spinner only while it owns it', () => {
 test('unmounting the panel invalidates reads that are still in flight', () => {
   // HMR or plugin dispose removes the slot while fetches are pending: those
   // closures hold setState for a component that is gone. Bumping the
-  // generation makes every pending read stale at its own guard (REVIEW-0904 P3).
+  // generation makes every pending read stale at its own guard.
   const cleanup = PANEL_SRC.slice(PANEL_SRC.indexOf('return () => {'))
   assert.match(cleanup, /generation\.current \+= 1/, 'cleanup must invalidate pending reads')
   assert.match(cleanup, /loadingOwner\.current = 0/, 'cleanup must drop the spinner owner')
