@@ -17,7 +17,10 @@
     "docs:check": "dsh-plugin-docs --config docs.config.mjs"
   },
   "devDependencies": {
-    "dsh-mini-utility-dock": "0.7.0"
+    "dsh-mini-utility-dock": "0.7.0",
+    "happy-dom": "^20.0.10",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh": ">=0.1.5-rc.3"

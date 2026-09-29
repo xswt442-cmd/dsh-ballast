@@ -2,8 +2,9 @@
 // while the pointer is over a row, so its contract is not only what it shows
 // but what it refuses to do: it answers from facts an earlier read already
 // cached, and it never starts a host request of its own. This file boots the
-// real client bundle in a vm with a hand-rolled React, renders the seat, and
-// drives the panel once so the cache holds something the host really answered.
+// real client bundle in a vm over a real DOM and the real React packages,
+// renders the seat, and drives the panel once so the cache holds something the
+// host really answered.
 
 import test from 'node:test'
 import assert from 'node:assert/strict'

@@ -4,8 +4,11 @@
 // `window.__ModuleLoader__`, so the honest way to test it is to evaluate it and
 // render what it registers: a text assertion over the source passes when the
 // identifier only appears in a comment, while a rendered tree passes only when the
-// component behaves. This module boots the bundle in a vm over a hand-rolled
-// React, and exposes the seats the way the shell would mount them.
+// component behaves. This module boots the bundle in a vm against a real DOM
+// (happy-dom), the real `react` package the host ships, and the real
+// `react-dom/client` renderer; every seat the plugin registers is mounted into
+// its own React root and re-rendered through `React.act`, so hook state, effect
+// ordering, and reconciliation are the framework's, not a stand-in's.
 //
 // The sandbox carries no `require`, `module`, `exports`, `process` or ESM loader,
 // so a client half that reached for a Node builtin or an `import` fails at boot
@@ -15,6 +18,19 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { Window } from 'happy-dom'
+
+const act = React.act
+
+// `react-dom` reads `window` / `document` off the global during rendering (event
+// delegation targets, active-element lookups). Each `bootClient` repoints them at
+// its own happy-dom `Window` before the first render, so the whole test file —
+// which boots one client at a time — resolves those lookups against that client's
+// DOM, while the vm keeps its own isolated reference to the same objects.
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
+
 const CLIENT_SOURCE = fs.readFileSync(new URL('../../lib/client.js', import.meta.url), 'utf8')
 
 /** The launcher menu seat this plugin contributes one row to (dock fragment). */
@@ -23,86 +39,6 @@ export const UTILITY_ITEM_SLOT = 'createhelper.utility.item'
 export const OVERLAY_SLOT = 'shell.overlay'
 /** The Sidebar Session row hover card seat. */
 export const HOVER_SLOT = 'sidebar.session.row.hover'
-
-// --- hand-rolled React ----------------------------------------------------
-// Hook slots belong to a component function, not to a global render order: the
-// seat, the menu row and the panel all render in these tests, so one shared hook
-// array would hand one component the other's slots. Effects run at render time and
-// honour their dependency list, because the paths under test are effects that must
-// fire for an open and not for a re-render.
-export function makeFakeReact() {
-  const stores = new Map()
-  let current = null
-
-  const react = {
-    Fragment: Symbol('Fragment'),
-    createElement(type, props, ...children) {
-      const flat = children.flat(Infinity)
-        .filter((child) => child !== null && child !== undefined && child !== false && child !== true)
-      return { type, props: props || {}, children: flat }
-    },
-    useState(initial) {
-      const store = current
-      const index = store.index++
-      if (!(index in store.hooks)) store.hooks[index] = typeof initial === 'function' ? initial() : initial
-      return [store.hooks[index], (value) => {
-        store.hooks[index] = typeof value === 'function' ? value(store.hooks[index]) : value
-      }]
-    },
-    useRef(initial) {
-      const store = current
-      const index = store.index++
-      if (!(index in store.hooks)) store.hooks[index] = { current: initial }
-      return store.hooks[index]
-    },
-    useCallback(callback) { return callback },
-    useEffect(callback, deps) {
-      const store = current
-      const index = store.index++
-      const previous = store.hooks[index]
-      const changed = previous === undefined || deps === undefined || previous.deps === undefined ||
-        deps.some((value, at) => !Object.is(value, previous.deps[at]))
-      if (!changed) return
-      if (previous && typeof previous.cleanup === 'function') previous.cleanup()
-      store.hooks[index] = { deps, cleanup: undefined }
-      const cleanup = callback()
-      if (typeof cleanup === 'function') store.hooks[index].cleanup = cleanup
-    }
-  }
-
-  const storeFor = (type) => {
-    let store = stores.get(type)
-    if (!store) {
-      store = { hooks: [], index: 0 }
-      stores.set(type, store)
-    }
-    return store
-  }
-
-  function renderNode(element) {
-    if (element === null || element === undefined || element === false || element === true) return null
-    if (typeof element !== 'object') return { type: 'text', props: {}, text: String(element), children: [] }
-    if (element.type === react.Fragment) {
-      return { type: 'fragment', props: {}, children: (element.children || []).map(renderNode).filter(Boolean) }
-    }
-    if (typeof element.type === 'function') {
-      const store = storeFor(element.type)
-      store.index = 0
-      const previous = current
-      current = store
-      let rendered
-      try { rendered = element.type(element.props) } finally { current = previous }
-      return renderNode(rendered)
-    }
-    return {
-      type: element.type,
-      props: element.props || {},
-      children: (element.children || []).map(renderNode).filter(Boolean)
-    }
-  }
-
-  return { react, renderNode }
-}
 
 // --- tree helpers ---------------------------------------------------------
 
@@ -115,6 +51,7 @@ export function allNodes(node, predicate, out = []) {
 
 export function textOf(node) {
   if (!node) return ''
+  if (node.type === 'text') return node.text || ''
   return (node.text || '') + (node.children || []).map(textOf).join('')
 }
 
@@ -125,56 +62,149 @@ export function byClass(className) {
 /** Buttons in a rendered tree, in document order. */
 export const buttonsIn = (node) => allNodes(node, (item) => item.type === 'button')
 
-/** Settle an async read chain: request -> json -> state -> follow-up request. */
+/** Settle the render + fetch chain: flush React work and pump macrotasks. */
 export const settle = async (rounds = 10) => {
-  for (let i = 0; i < rounds; i += 1) await new Promise((resolve) => setTimeout(resolve, 0))
+  for (let i = 0; i < rounds; i += 1) {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+  }
 }
 
-// --- fake document --------------------------------------------------------
+// --- snapshot from the real DOM -------------------------------------------
 
-// Only the two selectors the plugin actually asks about are answered: the
-// per-plugin stylesheet (which `ensureStyles` injects and the dispose path removes)
-// and everything else, which is the shell's own DOM and reads as absent.
-function makeDocument() {
-  const liveStyles = []
-  const listeners = []
-  const styleFor = (id) => liveStyles.find((element) => element.attributes['data-plugin-css'] === id) || null
-  return {
-    listeners,
-    head: {
-      appendChild(element) {
-        if (!liveStyles.includes(element)) liveStyles.push(element)
-      }
-    },
-    createElement(tag) {
-      const attributes = {}
-      return {
-        tagName: tag,
-        attributes,
-        style: {},
-        dataset: {},
-        children: [],
-        textContent: '',
-        setAttribute(name, value) { attributes[name] = String(value) },
-        appendChild(child) { this.children.push(child) },
-        remove() {
-          const at = liveStyles.indexOf(this)
-          if (at !== -1) liveStyles.splice(at, 1)
-        }
-      }
-    },
-    querySelector(selector) {
-      const style = /^style\[data-plugin-css="(.+)"\]$/.exec(selector)
-      if (style) return styleFor(style[1])
-      return null
-    },
-    addEventListener(type, handler) { listeners.push({ type, handler }) },
-    removeEventListener(type, handler) {
-      const at = listeners.findIndex((item) => item.type === type && item.handler === handler)
-      if (at !== -1) listeners.splice(at, 1)
-    },
-    hasStyle: (id) => styleFor(id) !== null
+// React owns the DOM. The test-facing tree is a read-only snapshot of that DOM:
+// every element node becomes a `{type, props, children}` record, every text node
+// a `{type:'text', text}` record. `props` mirrors what React wrote: HTML attributes
+// keep their original names (`aria-pressed`, `title`, `data-*`, …), the boolean
+// `hidden` property surfaces as `props.hidden`, `class` surfaces as
+// `props.className`, and every element exposes a `props.onClick()` that dispatches
+// a real bubbling `click` event back through React's event system inside `act`.
+// Assertions in the test files therefore read the same shape as before while every
+// interaction goes through React's own event and scheduling path.
+
+const ELEMENT_NODE = 1
+const TEXT_NODE = 3
+
+function snapshotElement(element, win) {
+  const props = { onClick: () => clickIn(element, win) }
+  for (const attribute of element.attributes) props[attribute.name] = attribute.value
+  // React writes these through DOM properties, not attributes: `hidden` is a
+  // boolean (the attribute alone would only ever read back as ""), and `class`
+  // reaches a test as `className`. Both take precedence over the raw attribute.
+  props.hidden = element.hidden === true
+  if (element.className) props.className = element.className
+  const children = []
+  for (const child of element.childNodes) {
+    const snap = snapshotNode(child, win)
+    if (snap) children.push(snap)
   }
+  return { type: String(element.tagName).toLowerCase(), props, children }
+}
+
+function snapshotNode(node, win) {
+  if (node.nodeType === TEXT_NODE) return { type: 'text', props: {}, children: [], text: node.nodeValue }
+  if (node.nodeType !== ELEMENT_NODE) return null
+  return snapshotElement(node, win)
+}
+
+function clickIn(element, win) {
+  act(() => { element.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true })) })
+}
+
+function snapshotContainer(container, win) {
+  const roots = []
+  for (const child of container.childNodes) {
+    const snap = snapshotNode(child, win)
+    if (snap) roots.push(snap)
+  }
+  if (roots.length === 0) return null
+  if (roots.length === 1) return roots[0]
+  return { type: 'fragment', props: {}, children: roots }
+}
+
+// --- per-boot document observer -------------------------------------------
+
+// The client attaches dismiss / keydown listeners directly on the document; the
+// tests need to observe that they go away on unmount. The observer wraps the real
+// happy-dom document's `addEventListener` / `removeEventListener` so the recording
+// is what React itself sees (the handler reference passed to add and to remove
+// matches), and exposes `hasStyle(id)` for the plugin-stylesheet check.
+function makeDocumentObserver(doc) {
+  const listeners = []
+  const realAdd = doc.addEventListener.bind(doc)
+  const realRemove = doc.removeEventListener.bind(doc)
+  doc.addEventListener = (type, handler, options) => {
+    listeners.push({ type, handler })
+    return realAdd(type, handler, options)
+  }
+  doc.removeEventListener = (type, handler, options) => {
+    const at = listeners.findIndex((item) => item.type === type && item.handler === handler)
+    if (at !== -1) listeners.splice(at, 1)
+    return realRemove(type, handler, options)
+  }
+  doc.hasStyle = (id) => doc.querySelector(`style[data-plugin-css="${id}"]`) !== null
+  doc.listeners = listeners
+  return doc
+}
+
+// --- root registry --------------------------------------------------------
+
+// A seat instance is a `createRoot` mounted once per identity and re-rendered on
+// every subsequent call — the way the shell keeps one mounted component per slot.
+// Identity is the component reference plus a structural fingerprint of the props:
+// seats that take no data (the launcher, the panel, the menu row) render with the
+// same fingerprint every call and therefore reuse their root and their hook state;
+// seats the shell reuses across different data contexts (the Session row hover
+// card is one instance per row) key on the data and mount a fresh root per context.
+// A test that renders two hover cards is therefore looking at two live components,
+// and a test that clicks and re-renders a panel is still looking at one.
+function makeRootRegistry(win) {
+  const byKey = new Map()
+  const typeIds = new Map()
+  let nextTypeId = 0
+  const typeIdOf = (type) => {
+    if (typeIds.has(type)) return typeIds.get(type)
+    const id = nextTypeId++
+    typeIds.set(type, id)
+    return id
+  }
+  // A function reference in props is what the shell's own slot render hands to a
+  // launcher: the reference is stable across every render of that seat, so the
+  // identity of the function (not its source) is what ties two renders together.
+  let nextFnId = 0
+  const fnIds = new Map()
+  const fnIdOf = (fn) => {
+    if (fnIds.has(fn)) return fnIds.get(fn)
+    const id = nextFnId++
+    fnIds.set(fn, id)
+    return id
+  }
+  const fingerprint = (value, depth = 0) => {
+    if (depth > 4) return '?'
+    if (value === null || value === undefined) return String(value)
+    const kind = typeof value
+    if (kind === 'function') return `f${fnIdOf(value)}`
+    if (kind !== 'object') return `${kind}:${String(value)}`
+    if (Array.isArray(value)) return `[${value.map((item) => fingerprint(item, depth + 1)).join(',')}]`
+    const keys = Object.keys(value).sort()
+    return `{${keys.map((k) => `${k}=${fingerprint(value[k], depth + 1)}`).join(',')}}`
+  }
+
+  const keyFor = (element) => `${typeIdOf(element.type)}|${fingerprint(element.props || {})}`
+
+  const mount = (element) => {
+    const key = keyFor(element)
+    let entry = byKey.get(key)
+    if (!entry) {
+      const container = win.document.createElement('div')
+      win.document.body.appendChild(container)
+      entry = { container, root: createRoot(container) }
+      byKey.set(key, entry)
+    }
+    act(() => { entry.root.render(element) })
+    return snapshotContainer(entry.container, win)
+  }
+
+  return { mount }
 }
 
 // --- boot -----------------------------------------------------------------
@@ -184,16 +214,17 @@ function makeDocument() {
  * @param server - `(url) => body`, the host the panel reads from.
  */
 export function bootClient({ server = () => ({ ok: false }) } = {}) {
-  const { react, renderNode } = makeFakeReact()
+  const win = new Window({ url: 'http://localhost/' })
+  globalThis.window = win
+  globalThis.document = win.document
+  const doc = makeDocumentObserver(win.document)
   const registered = []
   const fetched = []
-  const documentMock = makeDocument()
-  const windowMock = { addEventListener() {}, removeEventListener() {} }
   const context = {
     console: { warn() {}, error() {} },
     navigator: { language: 'en-US' },
-    document: documentMock,
-    window: windowMock,
+    document: doc,
+    window: win,
     fetch: async (url) => {
       fetched.push(String(url))
       return { ok: true, status: 200, json: async () => server(String(url)) }
@@ -201,14 +232,16 @@ export function bootClient({ server = () => ({ ok: false }) } = {}) {
   }
 
   let definition = null
-  windowMock.__ModuleLoader__ = { load(value) { definition = value } }
+  win.__ModuleLoader__ = { load(value) { definition = value } }
   vm.runInNewContext(CLIENT_SOURCE, context, { filename: 'lib/client.js' })
   assert.ok(definition, 'the bundle never registered itself with window.__ModuleLoader__')
 
   const plugin = definition.factory((name) => {
     assert.equal(name, 'react', 'the bundle must take React from the platform seed')
-    return react
+    return React
   })
+
+  const registry = makeRootRegistry(win)
   const slots = {
     // The fake shell resolves every seat immediately: what these tests are about is
     // what a seat renders, not the ordering of the runtime that provides it.
@@ -232,15 +265,20 @@ export function bootClient({ server = () => ({ ok: false }) } = {}) {
   const renderSeat = (name, id, props = {}) => {
     const seat = entry(name, id)
     assert.ok(seat, `no seat registered for ${name} / ${id}`)
-    return renderNode(react.createElement(seat.render, props))
+    return registry.mount(React.createElement(seat.render, props))
   }
-  // The shell's own slot renderer, which the launcher asks for by name.
-  const renderSlot = (name) => react.createElement(react.Fragment, null,
+  // The shell's own slot renderer, which the launcher asks for by name. Registered
+  // items compose under the caller's root, keyed by their slot id — the same way a
+  // shell mounting a slot tree keys its children.
+  const renderSlot = (name) => React.createElement(React.Fragment, null,
     registered.filter((item) => item.options.name === name)
-      .map((item) => react.createElement(item.render, { key: item.options.id })))
+      .map((item) => React.createElement(item.render, { key: item.options.id })))
+  // Render any React element through the framework. Test files that reach for a
+  // seat's render callback directly use this.
+  const renderNode = (element) => registry.mount(element)
 
   return {
-    react,
+    react: React,
     renderNode,
     definition,
     plugin,
@@ -250,11 +288,15 @@ export function bootClient({ server = () => ({ ok: false }) } = {}) {
     renderSeat,
     renderSlot,
     sandbox: context,
-    window: windowMock,
-    document: documentMock,
-    // Everything the shell would run when this plugin is unloaded.
+    window: win,
+    document: doc,
+    // Everything the shell would run when this plugin is unloaded. Disposal
+    // releases state (the panel closes itself), so its React work is flushed
+    // through `act` like every other interaction.
     dispose: async () => {
-      for (const handler of disposers.splice(0)) await handler()
+      for (const handler of disposers.splice(0)) {
+        await act(async () => { await handler() })
+      }
     }
   }
 }
