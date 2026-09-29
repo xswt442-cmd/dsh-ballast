@@ -11,7 +11,7 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-ballast?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-ballast)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-DSH Web 上下文窗口归因插件。它按消息条目显示当前 surface 的 token 占用和正文摘要，帮助定位窗口由哪些条目占用。插件只读，不估算费用、不修改会话，也不触发 compaction。
+DSH Web 上下文窗口归因插件。它按消息条目显示当前 surface 的 token 占用和正文摘要，定位窗口由哪些条目占用。DSH 内置的上下文显示给出整段占比；逐条归因、最重条目与跨 live session 比较由本插件提供。插件只读，不估算费用、不修改会话，也不触发 compaction。
 
 ## 功能
 
