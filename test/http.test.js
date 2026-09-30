@@ -49,7 +49,7 @@ function brokenSession() {
  *   Pass pre-0.1.2-alpha.2 shaped nodes (no heuristicTokens) to probe the
  *   degraded host.
  */
-async function mount(nodes, { connection } = {}) {
+async function mount(nodes, { connection, extra } = {}) {
   const session = fakeSession()
   const broken = brokenSession()
   const routes = new Map()
@@ -82,7 +82,11 @@ async function mount(nodes, { connection } = {}) {
         sessions: {
           list: () => [session, broken],
           get: (id) => (id === session.id ? session : id === broken.id ? broken : null)
-        }
+        },
+        // The optional services, present only in the tests that need them: a
+        // host that mounts none of them is the state the live half must keep
+        // working in.
+        ...extra
       })
     },
     on(event, fn) {
@@ -458,4 +462,86 @@ test('action=top is read-only in its method shape too', async (t) => {
   t.after(() => host.dispose())
 
   assert.equal((await send(host.url('?action=top'), {}, 'POST')).status, 405)
+})
+
+test('action=cold lists stored sessions the live half cannot see', async (t) => {
+  // A session with no live Agent has no Session object, so none of the live
+  // reads apply: the persistence snapshot is the only row source, and the
+  // projection cache the only token figure. The live session is absent from the
+  // list because the panel already shows it — reporting one conversation twice
+  // is worse than reporting it once.
+  const stored = [
+    { header: { id: 'sess-http-1', cwd: '/live' }, revision: 9, eventCount: 3, sizeBytes: 100 },
+    { header: { id: 'old-big', cwd: '/work/big' }, revision: 5, eventCount: 90, sizeBytes: 4_000_000 },
+    { header: { id: 'old-small', cwd: '/work/small' }, revision: 2, eventCount: 10, sizeBytes: 2048 },
+    // A backend that cannot price a log or its length cheaply omits the fields.
+    // The row then carries no figure, which is not the same answer as zero.
+    { header: { id: 'old-unpriced', cwd: '/work/other' }, revision: 1 }
+  ]
+  const host = await mount(SURFACE.nodes, {
+    extra: {
+      sessionPersistence: { list: async () => stored },
+      sessionProjectionCache: {
+        cachedSnapshot: (header) => header.id === 'old-big'
+          ? { values: { contextPressure: { pressureTokens: 400, contextWindow: 128000 }, tokenUsage: { outputTokens: 20, cacheReadTokens: 300 } } }
+          : { values: { contextPressure: { pressureTokens: 200 } } }
+      },
+      sessionQuery: {
+        readSession: async () => null,
+        readTitleSnapshots: (ids) => ids.map((id) => ({
+          status: 'fulfilled',
+          value: { session: { id }, title: { title: `标题 ${id}` } }
+        }))
+      }
+    }
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold'))
+  assert.equal(res.status, 200)
+  assert.equal(res.body.ok, true)
+  assert.equal(res.body.storedAvailability, 'available')
+  assert.deepEqual(res.body.sessions.map((row) => row.sessionId), ['old-big', 'old-small', 'old-unpriced'])
+  const [big, small, unpriced] = res.body.sessions
+  assert.equal(big.title, '标题 old-big')
+  assert.equal(big.titleSource, 'title')
+  assert.equal(big.sizeBytes, 4_000_000)
+  assert.equal(big.eventCount, 90)
+  assert.deepEqual(big.projections.contextPressure, { pressureTokens: 400, contextWindow: 128000 })
+  // The cache folds the token figures, so a stored row is priced without its log
+  // being read; the denominator it lacks stays absent rather than being inferred.
+  assert.deepEqual(small.projections.contextPressure, { pressureTokens: 200 })
+  assert.equal(unpriced.sizeBytes, null)
+  assert.equal(unpriced.eventCount, null)
+})
+
+test('action=cold reports a data directory it could not read instead of an empty one', async (t) => {
+  const host = await mount(SURFACE.nodes, {
+    extra: {
+      sessionPersistence: { list: async () => { throw new Error('locked') } }
+    }
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold'))
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body.sessions, [])
+  assert.equal(res.body.storedAvailability, 'unavailable')
+})
+
+test('action=cold answers an empty list rather than a 500 without a persistence backend', async (t) => {
+  const host = await mount(SURFACE.nodes)
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold'))
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body.sessions, [])
+  assert.equal(res.body.storedAvailability, 'unavailable')
+})
+
+test('action=cold is read-only in its method shape too', async (t) => {
+  const host = await mount(SURFACE.nodes)
+  t.after(() => host.dispose())
+
+  assert.equal((await send(host.url('?action=cold'), {}, 'POST')).status, 405)
 })

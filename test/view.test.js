@@ -29,13 +29,14 @@ const PANEL_SRC = region(CLIENT_SRC, PANEL_MARK, PLUGIN_MARK)
 // its wrong-data-on-screen bugs, so the structure that keeps them honest is
 // pinned here.
 const LOAD_MEASURE_SRC = region(PANEL_SRC, 'const loadMeasure =', 'const loadTop =')
-const LOAD_TOP_SRC = region(PANEL_SRC, 'const loadTop =', 'const refresh =')
+const LOAD_TOP_SRC = region(PANEL_SRC, 'const loadTop =', 'const loadCold =')
+const LOAD_COLD_SRC = region(PANEL_SRC, 'const loadCold =', 'const loadHostView =')
 const REFRESH_SRC = region(PANEL_SRC, 'const refresh =', 'React.useEffect(')
 
 const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
   'timeLabel', 'baselineLabel', 'shadowBadge',
   'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge',
-  'releaseLoading', 'factSummary']
+  'releaseLoading', 'factSummary', 'sizeLabel', 'coldPressure']
 
 // Keep copy assertions deterministic across developer machines and CI. Node 24
 // exposes navigator.language, so otherwise the evaluated browser fallback uses
@@ -208,7 +209,9 @@ test('the panel calls every helper instead of formatting inline', () => {
     'sharePct(group.share, 2)',
     'shareLabel(group)',
     'unpricedNote(measurement)',
-    'snapshotAge(state.receivedAt, Date.now())'
+    'snapshotAge(state.receivedAt, Date.now())',
+    'sizeLabel(entry.sizeBytes)',
+    'coldPressure(entry)'
   ]
   for (const call of calls) {
     assert.ok(PANEL_SRC.includes(call), `panel does not call ${call}`)
@@ -224,7 +227,7 @@ test('the panel calls every helper instead of formatting inline', () => {
   // measure_failed and top_partial carry the reason the host threw; a bare code
   // tells the user nothing, so every api path must prefer the message.
   const withMessage = PANEL_SRC.match(/body\.error \|\| body\.code/g) || []
-  assert.equal(withMessage.length, 3,
+  assert.equal(withMessage.length, 4,
     'every api path should surface the host error message')
 })
 
@@ -245,11 +248,54 @@ test('the panel surfaces the aggregate and the cross-session result', () => {
   }
 })
 
+test('the panel surfaces the stored half of the host view', () => {
+  // A stored session has no live Agent, so none of the live row fields exist
+  // for it: the panel has to read the persistence snapshot instead, and it has
+  // to render the stored half even while the live scan is still running.
+  for (const field of ['state.cold', 'state.coldLoading', 'state.coldStoredAvailable',
+    'entry.sizeBytes', 'entry.eventCount', 'coldPressure(entry)']) {
+    assert.ok(PANEL_SRC.includes(field), `panel never reads ${field}`)
+  }
+  assert.match(PANEL_SRC, /loadHostView/, 'the host view reads both halves')
+  const hostView = PANEL_SRC.slice(PANEL_SRC.indexOf('isHostView'))
+  assert.ok(hostView.indexOf('coldRows.map') > hostView.indexOf("tr('host.measuring')"),
+    'the stored list must not wait on the live scan')
+})
+
+test('sizeLabel refuses to invent a size for a session it cannot measure', () => {
+  assert.equal(view.sizeLabel(0), '—')
+  assert.equal(view.sizeLabel(null), '—')
+  assert.equal(view.sizeLabel(undefined), '—')
+  assert.equal(view.sizeLabel('2048'), '—', 'a string is not a byte count')
+  assert.equal(view.sizeLabel(999), '999 B')
+  assert.equal(view.sizeLabel(1_024), '1 KB')
+  assert.equal(view.sizeLabel(1_536), '1.5 KB')
+  assert.equal(view.sizeLabel(5_242_880), '5 MB')
+  assert.equal(view.sizeLabel(3_221_225_472), '3 GB')
+})
+
+test('coldPressure is silent without a pressure projection', () => {
+  assert.equal(view.coldPressure({}), null)
+  assert.equal(view.coldPressure({ projections: null }), null)
+  assert.equal(view.coldPressure({ projections: { tokenUsage: { outputTokens: 5 } } }), null)
+  // A stored row carries whatever the cache held at that session's last write,
+  // so the line is the same one the live view uses, wording included.
+  assert.equal(view.coldPressure({
+    projections: { contextPressure: { pressureTokens: 400, projectedTokens: 455, contextWindow: 128000 } }
+  }), '下次请求 455 / 128,000（0.4%）')
+})
+
+test('coldPressure falls back to the anchored reading when the projection has no estimate', () => {
+  assert.equal(view.coldPressure({
+    projections: { contextPressure: { pressureTokens: 400, contextWindow: 128000 } }
+  }), '下次请求 400 / 128,000（0.3%）')
+})
+
 test('every read owns its network failure instead of raising it into the page', () => {
   // Only res.json() was guarded before. A rejected fetch() — DSH restarting,
   // HMR dropping the socket — became a browser unhandled rejection, and the
   // panel went on showing the previous snapshot as if the read had worked.
-  for (const [name, src] of [['loadMeasure', LOAD_MEASURE_SRC], ['loadTop', LOAD_TOP_SRC]]) {
+  for (const [name, src] of [['loadMeasure', LOAD_MEASURE_SRC], ['loadTop', LOAD_TOP_SRC], ['loadCold', LOAD_COLD_SRC]]) {
     assert.match(src, /try \{[\s\S]*?await fetch\(/, `${name} must call fetch inside a try`)
     const caught = src.slice(src.indexOf('} catch'))
     assert.ok(caught.length > 0, `${name} never catches its fetch`)
@@ -259,12 +305,24 @@ test('every read owns its network failure instead of raising it into the page', 
   }
 })
 
+test('a superseded stored-session read still hands its spinner back', () => {
+  // `loadCold` takes `coldLoading` before it checks its stamp, so a read the
+  // panel has moved past has to clear it on the way out. Returning without doing
+  // so leaves the stored half reading forever: the rows and the empty state are
+  // both behind that flag, so neither ever renders.
+  const guards = [...LOAD_COLD_SRC.matchAll(/if \(gen !== generation\.current\) \{([\s\S]*?)\}/g)]
+  assert.ok(guards.length >= 2, 'loadCold must guard both its failure and its answer')
+  for (const [guard, body] of guards) {
+    assert.match(body, /coldLoading: false/, `the guard "${guard.trim()}" must release coldLoading`)
+  }
+})
+
 test('a queued read is either awaited or explicitly fire-and-forget', () => {
   // An unmarked call reads as an oversight; `void` is what says the handler is
   // done once the read is queued and the loader owns its own errors.
-  const callSites = PANEL_SRC.replace(/const (loadMeasure|loadTop|refresh) = React\.useCallback/g, '')
-  const found = [...callSites.matchAll(/(\S+\s+)?\b(loadMeasure|loadTop|refresh)\(/g)]
-  assert.ok(found.length >= 5, 'the panel should have call sites for all three reads')
+  const callSites = PANEL_SRC.replace(/const (loadMeasure|loadTop|loadCold|loadHostView|refresh) = React\.useCallback/g, '')
+  const found = [...callSites.matchAll(/(\S+\s+)?\b(loadMeasure|loadTop|loadCold|loadHostView|refresh)\(/g)]
+  assert.ok(found.length >= 7, 'the panel should have call sites for all its reads')
   for (const match of found) {
     const lead = (match[1] || '').trim()
     assert.ok(lead === 'void' || lead === 'await',
@@ -282,7 +340,7 @@ test('a refresh runs under one generation and honours the newest target', () => 
   assert.ok(!/state\.selected/.test(REFRESH_SRC), 'refresh must not trust the captured selection')
   assert.ok(!/state\.view/.test(REFRESH_SRC), 'refresh must not trust the captured view')
   assert.match(REFRESH_SRC, /stateRef\.current/, 'refresh must read the newest selection and view')
-  assert.match(REFRESH_SRC, /\}, \[loadMeasure, loadTop\]\)/,
+  assert.match(REFRESH_SRC, /\}, \[loadMeasure, loadHostView\]\)/,
     'refresh must depend only on its loaders')
   // `loading` disables the refresh button, so it has to be released — but only
   // by the refresh that owns it. Closing and reopening the panel starts a
