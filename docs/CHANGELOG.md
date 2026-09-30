@@ -3,6 +3,18 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.4.0 - 2026-09-30
+
+### 变更
+
+- 面板头部标明数据来自哪个宿主进程（PID 与端口），会话计数同时写明只统计该进程内活着的会话。
+- 面板打开期间按启动器图标只作用于启动器，面板保持打开。
+- 「宿主」视图在 live 会话之外列出已存储但没有 live agent 的会话，按占盘大小排序，并给出各自缓存里的上下文压力；这一半的日志条数、字节数与 revision 来自 `sessionPersistence.list()`，token 数字来自 `sessionProjectionCache.cachedSnapshot()`，标题来自一次批量日志读取。宿主读不到数据目录时该视图说明这一点，不把它显示成没有已存储会话。
+
+### 维护
+
+- 会话日志与标题改由 `ctx.sessionQuery` 读取（`readSession` / `readTitleSnapshots`），不再调用已废弃的 `Session.eventAt()` 与 `Session.snapshotEvents()`；日志长度与继承前缀仍用 `Session.seq` 与 `Session.inheritedEventCount` 这两个未废弃的同步访问面。
+
 ## 0.3.6 - 2026-09-29
 
 ### 维护

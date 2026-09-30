@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   shapeMeasurement,
   createMeterBridge,
@@ -57,32 +58,45 @@ test('rows join seq back to the durable event type', () => {
   assert.equal(out.rows[2].type, 'user/message')
 })
 
-test('RC1 Session readers never touch the removed events property', () => {
+test('the meter never calls a deprecated synchronous session reader', () => {
+  // core/session marks eventAt / snapshotEvents / ownEvents @deprecated: 'new
+  // calls are prohibited'. A session object that refuses all three is the only
+  // honest fixture for that rule, and it still has to answer every question the
+  // panel asks.
   const events = [
     { type: 'session/title', seq: 0, data: { title: 'RC1 title' } },
     { type: 'user/message', seq: 1, time: '2026-09-04T01:00:00.000Z', data: { text: 'hello' } },
     { type: 'tool/result', seq: 2, time: '2026-09-04T01:00:01.000Z', data: { text: 'done' } }
   ]
-  let snapshots = 0
-  let pointReads = 0
+  const refuse = () => { throw new Error('deprecated synchronous session read') }
   const rc1Session = {
     id: 'session-rc1',
     header: { cwd: '/work/fallback' },
     get seq() { return events.length },
-    eventAt(seq) { pointReads += 1; return events[seq] },
-    snapshotEvents() { snapshots += 1; return [...events] },
-    get events() { throw new Error('session.events was removed in DSH 0.1.2-rc.1') }
+    get inheritedEventCount() { return 0 },
+    eventAt: refuse,
+    snapshotEvents: refuse,
+    ownEvents: refuse
   }
 
-  assert.deepEqual(resolveSessionTitle(rc1Session), { title: 'RC1 title', titleSource: 'title' })
+  assert.deepEqual(resolveSessionTitle({ ...rc1Session, events }), { title: 'RC1 title', titleSource: 'title' })
   const out = shapeMeasurement({
     ...measurement,
     nodes: [{ seq: 1, tokens: 12, heuristicTokens: 12 }, { seq: 2, tokens: 20, heuristicTokens: 20 }]
-  }, rc1Session)
-  assert.equal(out.eventCount, 3)
+  }, rc1Session, { events, inheritedEventCount: 0 })
+  assert.equal(out.eventCount, 3, 'the log length comes from session.seq, not a reader')
   assert.deepEqual(out.rows.map((row) => row.type), ['tool/result', 'user/message'])
-  assert.equal(pointReads, 2, 'row joins should use eventAt rather than indexing a copied log')
-  assert.ok(snapshots >= 2, 'title/tool-name derivations need stable snapshots')
+})
+
+test('lib/meter.js names no deprecated session reader', () => {
+  // The fixture above proves the paths the tests exercise; this proves the ones
+  // they do not. Comments are stripped first so the deprecation note in the
+  // header does not satisfy its own ban.
+  const source = readFileSync(new URL('../lib/meter.js', import.meta.url), 'utf8')
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
+  for (const name of ['.eventAt(', '.snapshotEvents(', '.ownEvents(']) {
+    assert.equal(code.includes(name), false, `lib/meter.js must not call ${name}`)
+  }
 })
 
 test('rows tolerate missing events (seq beyond the log)', () => {
@@ -184,6 +198,17 @@ const liveSession = {
   ]
 }
 
+// A session whose log carries a `session/title` event, so the two title answers
+// differ: the log says 'log title', while the cwd basename would say
+// 'demo-project'. A fixture where both agree cannot tell the paths apart.
+const titledSession = {
+  ...liveSession,
+  events: [
+    ...liveSession.events,
+    { type: 'session/title', seq: 3, time: 1300, data: { title: 'log title' } }
+  ]
+}
+
 const fenceServices = {
   tokenMeter: { measure: () => measurement },
   sessions: {
@@ -192,7 +217,7 @@ const fenceServices = {
   }
 }
 
-test('the bridge binds services inside the inject fence, never at apply time', () => {
+test('the bridge binds services inside the inject fence, never at apply time', async () => {
   const meterCalls = []
   const ctx = makeFenceCtx({
     tokenMeter: { measure: (session) => { meterCalls.push(session.id); return measurement } },
@@ -201,11 +226,11 @@ test('the bridge binds services inside the inject fence, never at apply time', (
   const bridge = createMeterBridge(ctx)
   assert.equal(bridge.availability(), 'available')
   assert.deepEqual(meterCalls, [], 'constructing the bridge must not price anything')
-  assert.equal(bridge.measure('session-1').ok, true)
+  assert.equal((await bridge.measure('session-1')).ok, true)
   assert.deepEqual(meterCalls, ['session-1'])
 })
 
-test('a tokenMeter without measure() leaves the bridge unavailable, not lying', () => {
+test('a tokenMeter without measure() leaves the bridge unavailable, not lying', async () => {
   // Shape-check on bind: availability() must describe what the bridge can
   // actually do. A service object that lacks measure() would otherwise read as
   // 'available' and then fail every request with measure_failed.
@@ -214,11 +239,11 @@ test('a tokenMeter without measure() leaves the bridge unavailable, not lying', 
     sessions: fenceServices.sessions
   }))
   assert.equal(bridge.availability(), 'unavailable')
-  assert.deepEqual(bridge.measure('session-1'), { ok: false, code: 'unavailable' })
-  assert.deepEqual(bridge.listSessions(), [])
+  assert.deepEqual(await bridge.measure('session-1'), { ok: false, code: 'unavailable' })
+  assert.deepEqual(await bridge.listSessions(), [])
 })
 
-test('a malformed measurement is one failed session, not an escaped throw', () => {
+test('a malformed measurement is one failed session, not an escaped throw', async () => {
   // shapeMeasurement reads measurement.nodes. A measurement the meter still
   // returns but that lacks the node list has to land in the same bucket as a
   // corrupt log: measure() answers measure_failed and top() records a failure,
@@ -228,8 +253,8 @@ test('a malformed measurement is one failed session, not an escaped throw', () =
     tokenMeter: { measure: () => malformed },
     sessions: fenceServices.sessions
   }))
-  assert.equal(bridge.measure('session-1').code, 'measure_failed')
-  const top = bridge.top(5)
+  assert.equal((await bridge.measure('session-1')).code, 'measure_failed')
+  const top = await bridge.top(5)
   assert.equal(top.ok, true, 'one bad session must not fail the whole host view')
   assert.deepEqual(top.sessions, [])
   assert.equal(top.failedCount, 1)
@@ -241,51 +266,114 @@ test('reading a service off ctx outside the fence is exactly what the harness fo
   assert.throws(() => ctx.sessions, /without inject/)
 })
 
-test('a scope without the services degrades to unavailable instead of throwing', () => {
+test('a scope without the services degrades to unavailable instead of throwing', async () => {
   // Found in browser QA: the fence body receives one scope object, and a bridge
   // that binds services positionally gets `undefined` for all of them. Whatever
   // the cause, an unbound service must not turn a read-only route into a 500.
   const bridge = createMeterBridge({ inject: (names, cb) => cb(Object.create(null)) })
   assert.equal(bridge.availability(), 'unavailable')
-  assert.deepEqual(bridge.listSessions(), [])
-  assert.deepEqual(bridge.measure('session-1'), { ok: false, code: 'unavailable' })
+  assert.deepEqual(await bridge.listSessions(), [])
+  assert.deepEqual(await bridge.measure('session-1'), { ok: false, code: 'unavailable' })
 })
 
-test('availability stays unavailable until the injected services arrive', () => {
+test('availability stays unavailable until the injected services arrive', async () => {
   const ctx = makeFenceCtx(fenceServices, { defer: true })
   const bridge = createMeterBridge(ctx)
   assert.equal(bridge.availability(), 'unavailable')
-  assert.deepEqual(bridge.listSessions(), [])
-  assert.deepEqual(bridge.measure('session-1'), { ok: false, code: 'unavailable' })
+  assert.deepEqual(await bridge.listSessions(), [])
+  assert.deepEqual(await bridge.measure('session-1'), { ok: false, code: 'unavailable' })
   ctx.provide()
   assert.equal(bridge.availability(), 'available')
-  assert.equal(bridge.measure('session-1').ok, true)
+  assert.equal((await bridge.measure('session-1')).ok, true)
 })
 
-test('a session the store does not know is an honest no_live_session', () => {
+test('a session the store does not know is an honest no_live_session', async () => {
   const ctx = makeFenceCtx({ tokenMeter: { measure: () => measurement }, sessions: { list: () => [], get: () => undefined } })
-  assert.deepEqual(createMeterBridge(ctx).measure('gone'), { ok: false, code: 'no_live_session' })
+  assert.deepEqual(await createMeterBridge(ctx).measure('gone'), { ok: false, code: 'no_live_session' })
 })
 
-test('a measure() that throws on a corrupt log fails one session, not the route', () => {
+test('a measure() that throws on a corrupt log fails one session, not the route', async () => {
   const ctx = makeFenceCtx({
     tokenMeter: { measure: () => { throw new Error('surface replace range out of bounds') } },
     sessions: fenceServices.sessions
   })
-  const result = createMeterBridge(ctx).measure('session-1')
+  const result = await createMeterBridge(ctx).measure('session-1')
   assert.equal(result.ok, false)
   assert.equal(result.code, 'measure_failed')
   assert.match(result.error, /replace range/)
 })
 
-test('the measure payload carries the display title next to the measurement', () => {
+test('the measure payload carries the display title next to the measurement', async () => {
   const ctx = makeFenceCtx(fenceServices)
-  const result = createMeterBridge(ctx).measure('session-1')
+  const result = await createMeterBridge(ctx).measure('session-1')
   assert.equal(result.title, 'demo-project')
   assert.equal(result.titleSource, 'cwd')
 })
 
-test('the bridge exposes optional RC1 projection values without mixing their accounting bases', () => {
+test('a title the query answers with is preferred over the cwd fallback', async () => {
+  // 手动验证 (browser QA 前的一次宿主实测): the durable title lives in the log,
+  // and ctx.sessionQuery is the only sanctioned reader for it. The cwd basename
+  // is a fallback for sessions that never carried a session/title event.
+  // A fresh session object, because `derived` memoizes on identity and other
+  // tests have already answered for liveSession at this log length.
+  const titled = { ...liveSession }
+  const ctx = makeFenceCtx({
+    tokenMeter: { measure: () => measurement },
+    sessions: { list: () => [titled], get: (id) => (id === titled.id ? titled : undefined) },
+    sessionQuery: {
+      readSession: async () => null,
+      readTitleSnapshots: (ids) => ids.map((id) => ({
+        status: 'fulfilled',
+        value: { session: { id }, title: { title: 'queried title', messageSeqs: [], source: 'model', eventSeq: 3, updatedAt: 1 } }
+      }))
+    }
+  })
+  const bridge = createMeterBridge(ctx)
+  const result = await bridge.measure('session-1')
+  assert.equal(result.title, 'queried title')
+  assert.equal(result.titleSource, 'title')
+  const list = await bridge.listSessions()
+  assert.equal(list[0].title, 'queried title')
+})
+
+test('a rejected title read leaves the title in the log this process holds', async () => {
+  // The batch named no row, so the cwd basename must not be memoized in its
+  // place: the log this process already holds names the session, and the panel
+  // would otherwise lose that title for the rest of the process.
+  const rejected = { ...titledSession }
+  const ctx = makeFenceCtx({
+    tokenMeter: { measure: () => measurement },
+    sessions: { list: () => [rejected], get: (id) => (id === rejected.id ? rejected : undefined) },
+    sessionQuery: {
+      readSession: async () => null,
+      readTitleSnapshots: () => [{ status: 'rejected', reason: new Error('search disabled') }]
+    }
+  })
+  const bridge = createMeterBridge(ctx)
+  const result = await bridge.measure('session-1')
+  assert.equal(result.title, 'log title')
+  assert.equal(result.titleSource, 'title')
+  // A second refresh must give the same answer rather than a memoized fallback.
+  assert.equal((await bridge.listSessions())[0].title, 'log title')
+})
+
+test('a title read that throws leaves the title in the log this process holds', async () => {
+  const failing = { ...titledSession }
+  const ctx = makeFenceCtx({
+    tokenMeter: { measure: () => measurement },
+    sessions: { list: () => [failing], get: (id) => (id === failing.id ? failing : undefined) },
+    sessionQuery: {
+      readSession: async () => null,
+      readTitleSnapshots: () => { throw new Error('query service down') }
+    }
+  })
+  const bridge = createMeterBridge(ctx)
+  const result = await bridge.measure('session-1')
+  assert.equal(result.title, 'log title')
+  assert.equal(result.titleSource, 'title')
+})
+
+test('the bridge exposes optional RC1 projection values without mixing their accounting bases', async () => {
   const projectionValues = {
     tokenUsage: { uncachedInputTokens: 100, outputTokens: 20, cacheReadTokens: 300, cacheWriteTokens: 40 },
     contextPressure: { pressureTokens: 400, projectedTokens: 455, contextWindow: 128000 },
@@ -300,7 +388,7 @@ test('the bridge exposes optional RC1 projection values without mixing their acc
       }
     }
   })
-  const result = createMeterBridge(ctx).measure('session-1')
+  const result = await createMeterBridge(ctx).measure('session-1')
   assert.deepEqual(result.projections, projectionValues)
 })
 
@@ -319,26 +407,26 @@ test('missing or malformed optional projections degrade to null', () => {
   )
 })
 
-test('listSessions is heaviest-first and carries a display title', () => {
+test('listSessions is heaviest-first and carries a display title', async () => {
   const small = { id: 'tiny', header: {}, events: [{ type: 'user/message', seq: 0 }] }
   const ctx = makeFenceCtx({
     tokenMeter: { measure: () => measurement },
     sessions: { list: () => [small, liveSession], get: () => undefined }
   })
-  assert.deepEqual(createMeterBridge(ctx).listSessions(), [
-    { sessionId: 'session-1', eventCount: 3, title: 'demo-project', titleSource: 'cwd' },
-    { sessionId: 'tiny', eventCount: 1, title: 'tiny', titleSource: 'id' }
+  assert.deepEqual(await createMeterBridge(ctx).listSessions(), [
+    { sessionId: 'session-1', eventCount: 3, ownEventCount: null, inheritedEventCount: null, title: 'demo-project', titleSource: 'cwd' },
+    { sessionId: 'tiny', eventCount: 1, ownEventCount: null, inheritedEventCount: null, title: 'tiny', titleSource: 'id' }
   ])
 })
 
-test('listSessions tolerates a session whose event log is not initialized yet', () => {
+test('listSessions tolerates a session whose event log is not initialized yet', async () => {
   const pending = { id: 'pending', header: {} }
   const ctx = makeFenceCtx({
     tokenMeter: { measure: () => measurement },
     sessions: { list: () => [pending], get: () => pending }
   })
-  assert.deepEqual(createMeterBridge(ctx).listSessions(), [
-    { sessionId: 'pending', eventCount: 0, title: 'pending', titleSource: 'id' }
+  assert.deepEqual(await createMeterBridge(ctx).listSessions(), [
+    { sessionId: 'pending', eventCount: 0, ownEventCount: null, inheritedEventCount: null, title: 'pending', titleSource: 'id' }
   ])
 })
 

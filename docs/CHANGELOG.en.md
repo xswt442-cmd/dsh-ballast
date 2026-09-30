@@ -3,6 +3,18 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.4.0 - 2026-09-30
+
+### Changed
+
+- The panel header names the host process that answered, by pid and port, and the session count states that it covers only that process's live sessions.
+- While the panel is open, a press on the launcher icon acts on the launcher alone and leaves the panel open.
+- The host view lists stored sessions that no live agent owns, largest on disk first, with the context pressure the projection cache held for each; event count, size and revision come from `sessionPersistence.list()`, the token figures from `sessionProjectionCache.cachedSnapshot()`, and the titles from one batched log read. A host that cannot read its data directory says so instead of showing the list as empty.
+
+### Maintenance
+
+- Session logs and titles now come from `ctx.sessionQuery` (`readSession` / `readTitleSnapshots`) instead of the deprecated `Session.eventAt()` and `Session.snapshotEvents()`; the log length and the inherited prefix still use `Session.seq` and `Session.inheritedEventCount`, which are not deprecated.
+
 ## 0.3.6 - 2026-09-29
 
 ### Maintenance

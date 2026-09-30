@@ -101,6 +101,33 @@ test('unmounting the panel drops its document listeners', async () => {
     'the closed panel left its dismiss listener on the document')
 })
 
+// The dismiss listener's boundary is an attribute, and it has to be one the
+// launcher actually writes: the wrapper it marks as its own anchor. Matching an
+// attribute nothing in the page sets turns every press on the launcher icon into a
+// click outside the panel, which closes the panel the press just opened.
+test('a press on the launcher does not close the panel it opened', async () => {
+  const client = bootClient({ server })
+  const press = (target) => client.react.act(() => {
+    target.dispatchEvent(new client.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }))
+  })
+
+  menuRow(launcher(client))[0].props.onClick()
+  panel(client)
+  await settle()
+
+  // Anywhere else on the page is the dismissal the listener exists for.
+  press(client.document.body)
+  assert.equal(panel(client), null, 'a press outside the panel left it open')
+
+  menuRow(launcher(client))[0].props.onClick()
+  panel(client)
+  await settle()
+  const anchor = client.document.querySelector('[data-utility-anchor]')
+  assert.ok(anchor, 'the launcher writes no anchor attribute for the panel to exclude')
+  press(anchor.querySelector('.createhelper-utility-launcher'))
+  assert.ok(panel(client), 'a press on the launcher closed the panel it opened')
+})
+
 // The plugin-level dispose is the shell unloading the whole bundle: the panel
 // must go, its stylesheet must go, and the launcher claim must go with it so a
 // later copy of the launcher assembly can take the mutex.

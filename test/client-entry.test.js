@@ -8,7 +8,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  OVERLAY_SLOT, UTILITY_ITEM_SLOT, HOVER_SLOT, allNodes, bootClient, settle
+  OVERLAY_SLOT, UTILITY_ITEM_SLOT, HOVER_SLOT, allNodes, bootClient, byClass, settle, textOf
 } from './support/client-runtime.js'
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -41,6 +41,9 @@ function server() {
     }
     return {
       ok: true,
+      // The identity of the process that answered, as the route reports it.
+      pid: 4242,
+      port: 19387,
       availability: 'available',
       sessions: [{ sessionId: 'session-a', eventCount: 4, title: 'Alpha', titleSource: 'title' }]
     }
@@ -115,4 +118,29 @@ test('every read the panel makes goes to this plugin\'s own same-origin route', 
   }
   assert.ok(client.fetched.some((url) => url.includes('action=measure')), 'the panel never measured a session')
   assert.ok(client.fetched.some((url) => url.includes('action=top')), 'the panel never ran the cross-session scan')
+})
+
+// The identity of the answering process is part of the snapshot, not decoration:
+// two DSH hosts can serve one data directory, and a panel lists only the sessions
+// alive in the process that replied. A header that shows a bare count invites the
+// reader to add up the other host's sessions.
+test('the panel header names the host process that answered', async () => {
+  const client = bootClient({ server: server() })
+  const panel = () => client.renderSeat(OVERLAY_SLOT, 'ballast-panel')
+  const menu = client.renderSeat(OVERLAY_SLOT, 'utility-launcher', { renderSlot: client.renderSlot })
+  const [row] = allNodes(menu, (node) => node.type === 'button' && node.props['aria-pressed'] !== undefined)
+  row.props.onClick()
+  panel()
+  await settle()
+
+  const [identity] = allNodes(panel(), byClass('dshbl-hostproc'))
+  assert.ok(identity, 'the panel header does not name the host process')
+  assert.equal(textOf(identity), 'pid 4242 · port 19387')
+
+  // The count the cross-session view shows is that same process's live sessions.
+  const [hostView] = allNodes(panel(), (node) => node.type === 'button' && node.props['aria-pressed'] !== undefined)
+  hostView.props.onClick()
+  await settle()
+  const [count] = allNodes(panel(), byClass('dshbl-count'))
+  assert.equal(textOf(count), '1 sessions in this host process')
 })
