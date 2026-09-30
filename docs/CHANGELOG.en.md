@@ -3,6 +3,13 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- The panel header names the host process that answered, by pid and port, and the session count states that it covers only that process's live sessions.
+- While the panel is open, a press on the launcher icon acts on the launcher alone instead of also closing the panel.
+
 ## 0.3.6 - 2026-09-29
 
 ### Maintenance
