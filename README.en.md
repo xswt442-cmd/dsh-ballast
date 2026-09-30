@@ -20,6 +20,7 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 - Show token share aggregated by message type and the heaviest entry in each live session on the current host.
 - Show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and the provider-usage anchor use different accounting bases, and the panel does not add them together.
 - List the sessions on the current host: those live in this process, plus those stored with no live agent. When a session title is missing, the row shows the workspace basename and session ID.
+- The panel header names the host process that answered, by PID and port, and the session count covers only that process's sessions.
 - Every Sidebar Session row's hover card carries one ballast line; clicking it opens the panel on that session.
 - That line shows the occupancy the plugin has already read for the session: its surface total and heaviest entry, or the log length when only the session list has been read.
 - Hovering reads nothing from the host, and with nothing cached the line shows no number.
