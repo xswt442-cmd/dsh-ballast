@@ -6,7 +6,7 @@
 [![DSH](https://img.shields.io/static/v1?label=DSH&message=plugin&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-ballast?label=npm&color=4d6bfe)](https://www.npmjs.com/package/dsh-ballast)
 [![release](https://img.shields.io/github/v/release/xswt442-cmd/dsh-ballast?label=release&color=16a3a3)](https://github.com/xswt442-cmd/dsh-ballast/releases)
-[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.1.5-rc.3&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.2.0-rc.1&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/static/v1?label=node&message=%3E%3D20&color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
 [![downloads](https://img.shields.io/npm/d18m/dsh-ballast?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-ballast)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
@@ -59,7 +59,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 - 只计量当前 host 的 live session，不读取其他 host 的会话；已结束会话只读持久化快照、投影缓存与一次批量标题读取。
 - 所有操作只读，不写状态、不删除消息，也不触发 compaction。
 - 不提供预算、费用表、压缩预测与正文导出。
-- DSH 0.1.5-rc.3 及更高版本的 API 复用 Connection 的 Host/Origin 校验与浏览器签名 cookie。
+- 受支持的全部 DSH 版本（`>=0.2.0-rc.1`）的 API 复用 Connection 的 Host/Origin 校验与浏览器签名 cookie。
 - 缺少或错误的浏览器认证返回 `401/403`。
 - 未挂载 Connection 的宿主回退到本地守卫，按 TCP 对端、Fetch Metadata、`Origin` 和 loopback `Host` 判定。
 - 本地守卫模式下，能连接 DSH Web 端口的本机进程在信任边界内。
@@ -74,10 +74,12 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 
 | 项目 | 要求 |
 | --- | --- |
-| DSH | `>=0.1.5-rc.3` |
+| DSH | `>=0.2.0-rc.1` |
 | Node.js | `>=20` |
 
-DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.1.5-rc.3`、`0.1.7-rc.2`、`0.2.0-rc.1` 与 `0.2.1-rc.2`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
+DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.2.0-rc.1` 与 `0.2.1-rc.2`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
+
+低于 `0.2.0-rc.1` 的 0.1.x 版本线不再测试，也不再声明支持。`0.2.0-rc.1` 之前的宿主行为仍由单元测试覆盖，但真实启动验证只覆盖声明支持的两条线。
 
 RC1 的 `seq`、`inheritedEventCount`、`events` 均受支持：有 `ctx.sessionQuery` 时按 seq 取事件内容，没有时用旧的 `.events` 数组。projection 缺失时不显示 provider usage 与构成估算，逐条 token 计量仍然提供。`contextPressure` 缺少 `contextWindow` 时留空，不从别处推断。
 

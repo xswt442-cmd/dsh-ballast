@@ -6,7 +6,7 @@
 [![DSH](https://img.shields.io/static/v1?label=DSH&message=plugin&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-ballast?label=npm&color=4d6bfe)](https://www.npmjs.com/package/dsh-ballast)
 [![release](https://img.shields.io/github/v/release/xswt442-cmd/dsh-ballast?label=release&color=16a3a3)](https://github.com/xswt442-cmd/dsh-ballast/releases)
-[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.1.5-rc.3&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.2.0-rc.1&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/static/v1?label=node&message=%3E%3D20&color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
 [![downloads](https://img.shields.io/npm/d18m/dsh-ballast?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-ballast)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
@@ -59,7 +59,7 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 - Measures live sessions on the current host only; sessions on other hosts are not read, and ended sessions are read only through their persistence snapshot, the projection cache, and one batched title read.
 - All operations are read-only: no state writes, no message deletion, and no compaction.
 - There are no budgets, price tables, compaction forecasts, or content exports.
-- On DSH 0.1.5-rc.3 and newer, the API reuses Connection's Host/Origin checks and signed browser cookie.
+- On every supported DSH version (`>=0.2.0-rc.1`), the API reuses Connection's Host/Origin checks and signed browser cookie.
 - Missing or invalid browser authentication returns `401/403`.
 - A host that does not mount Connection falls back to the local guard, which decides by TCP peer, Fetch Metadata, `Origin`, and loopback `Host`.
 - Under the local guard, a process that can reach the DSH Web port is inside the trust boundary.
@@ -74,10 +74,12 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 
 | Item | Requirement |
 | --- | --- |
-| DSH | `>=0.1.5-rc.3` |
+| DSH | `>=0.2.0-rc.1` |
 | Node.js | `>=20` |
 
-DSH Desktop is an Electron shell around the same web application; it shares the `webServer`, the client seats, and the launcher, and its data directory is the same `DSH_HOME`. This plugin behaves on Desktop as it does on `dsh web`. The compatibility matrix pins `0.1.5-rc.3`, `0.1.7-rc.2`, `0.2.0-rc.1`, and `0.2.1-rc.2`; each version boots a real host once on Windows and once on Linux.
+DSH Desktop is an Electron shell around the same web application; it shares the `webServer`, the client seats, and the launcher, and its data directory is the same `DSH_HOME`. This plugin behaves on Desktop as it does on `dsh web`. The compatibility matrix pins `0.2.0-rc.1` and `0.2.1-rc.2`; each version boots a real host once on Windows and once on Linux.
+
+The 0.1.x lines below `0.2.0-rc.1` are no longer tested and are no longer claimed as supported. Host behaviour older than that is still covered by the unit tests, but a real boot is only verified against the two declared lines.
 
 RC1's `seq`, `inheritedEventCount`, and `events` are all supported: with `ctx.sessionQuery` present, event content is read by seq, and without it the older `.events` array is used. A missing projection hides the provider-usage and estimated-mix block; per-message token metering is still provided. A `contextPressure` without a `contextWindow` stays empty rather than being inferred from elsewhere.
 
