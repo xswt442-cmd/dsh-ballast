@@ -62,7 +62,7 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 - A missing token meter, an ended session, and a failed per-session measurement each return an explicit error. An ended session is out of `measure`'s scope and is listed by `cold` instead.
 - A host without heuristic shadow prices shows no price difference; basic measurement is still provided.
 - The log length and the inherited prefix come from `Session.seq` and `Session.inheritedEventCount`; reading event content by seq and reading titles in bulk go through `ctx.sessionQuery` (`readSession` / `readTitleSnapshots`). When both are absent, the older host's `.events` array is the fallback.
-- The deprecated `Session.eventAt()`, `Session.snapshotEvents()`, and `Session.ownEvents()` are never called; tests assert both the source text and the behaviour.
+- The deprecated `Session.eventAt()`, `Session.snapshotEvents()`, and `Session.ownEvents()` are not called.
 
 ## Platform and compatibility
 
@@ -73,17 +73,9 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 
 RC1's `seq`, `inheritedEventCount`, and `events` are all supported: with `ctx.sessionQuery` present, event content is read by seq, and without it the older `.events` array is used. A missing projection hides the provider-usage and estimated-mix block; per-message token metering is still provided. A `contextPressure` without a `contextWindow` stays empty rather than being inferred from elsewhere.
 
-## Development and verification
+## Development
 
-Symlinking the development repository into a running DSH profile lets HMR load an intermediate multi-file edit and terminate the instance. Verification commands:
-
-```powershell
-npm test
-npm run docs:check
-Get-ChildItem lib/*.js | ForEach-Object { node --check $_.FullName }
-node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
-npm pack --dry-run
-```
+Verification commands are in `AGENTS.md` at the repository root; release steps are in `docs/development/RELEASE.md`.
 
 ## License
 

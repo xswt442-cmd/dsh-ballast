@@ -62,7 +62,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 - token meter 未注入、会话已结束或单次计量失败时返回明确错误。已结束会话不在 `measure` 的范围内，由 `cold` 列出。
 - host 缺少 heuristic 影子价时不显示价差，基础计量仍然提供。
 - 日志长度与继承前缀取 `Session.seq` 与 `Session.inheritedEventCount`；按 seq 取事件内容与批量标题走 `ctx.sessionQuery`（`readSession` / `readTitleSnapshots`）。两者都缺席时回落到旧 host 的 `.events` 数组。
-- 已废弃的 `Session.eventAt()`、`Session.snapshotEvents()` 与 `Session.ownEvents()` 一次都不调用，由测试直接断言源码文本与行为两条路径。
+- 已废弃的 `Session.eventAt()`、`Session.snapshotEvents()` 与 `Session.ownEvents()` 不被调用。
 
 ## 平台与兼容性
 
@@ -73,17 +73,9 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 
 RC1 的 `seq`、`inheritedEventCount`、`events` 均受支持：有 `ctx.sessionQuery` 时按 seq 取事件内容，没有时用旧的 `.events` 数组。projection 缺失时不显示 provider usage 与构成估算，逐条 token 计量仍然提供。`contextPressure` 缺少 `contextWindow` 时留空，不从别处推断。
 
-## 开发与验证
+## 开发
 
-开发仓库以符号链接挂入正在运行的 DSH profile 时，多文件编辑期间的 HMR 可能载入中间状态并使实例退出。验证命令：
-
-```powershell
-npm test
-npm run docs:check
-Get-ChildItem lib/*.js | ForEach-Object { node --check $_.FullName }
-node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
-npm pack --dry-run
-```
+验证命令见仓库根目录的 `AGENTS.md`，发布步骤见 `docs/development/RELEASE.md`。
 
 ## License
 
