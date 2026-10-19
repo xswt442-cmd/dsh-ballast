@@ -9,6 +9,8 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 - Every row of the current session carries a locate button; clicking it scrolls the chat to that entry and highlights it. The button appears only while the chat is showing the session being measured.
 - Locating reads internal chat DOM attributes rather than a public interface. When the host stops providing them the button is absent, and a click can only reach the first entry of the same turn; the rest of the panel is unaffected.
+- Every stored row carries a measure action: it reads that session's complete event log and reports its surface total and entry count by the same accounting as a live session, replacing the possibly stale figures the projection cache held. Listing the sessions reads no log; measurement is triggered per row and runs one session at a time.
+- That measurement needs `ctx.sessionQuery` and an `@deepseek-ai/dsh-session` resolvable inside the host process; without either one the row offers no action. A corrupt log fails on its own row and leaves the others alone, and one request measures at most 20 sessions.
 
 ## 0.4.1 - 2026-10-19
 

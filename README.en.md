@@ -22,6 +22,7 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 - Show token share aggregated by message type and the heaviest entry in each live session on the current host.
 - Show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and the provider-usage anchor use different accounting bases, and the panel does not add them together.
 - List the sessions on the current host: those live in this process, plus those stored with no live agent. When a session title is missing, the row shows the workspace basename and session ID.
+- Stored sessions can be measured on demand from their complete event log, by the same accounting as a live session, instead of showing only the possibly stale figures the projection cache holds.
 - The panel header names the host process that answered, by PID and port, and the session count covers only that process's sessions.
 - Every Sidebar Session row's hover card carries one ballast line; clicking it opens the panel on that session.
 - That line shows the occupancy the plugin has already read for the session: its surface total and heaviest entry, or the log length when only the session list has been read.
@@ -49,8 +50,9 @@ The panel has two views:
 
 - **Current session**: inspect occupancy, type, time, and preview for each entry on the current surface. Entries folded away by a compaction `replace` are not shown.
 - **Cross-session top**: on demand, measure each live session on the current host once and sort sessions by their heaviest entry. Read cost grows with the number of live sessions. One failed session does not affect the other results. The same view lists stored sessions that no live agent owns, largest on disk first, with the context pressure the projection cache held for each. Event count, size, and revision come from the persistence snapshot and the token figures from the projection cache, so they can be as old as that session's last write; the titles come from one batched log read.
+- Every stored row carries a measure action: clicking it reads that session's complete event log, measures it by the same accounting as a live session, and shows its surface total and entry count. Listing the sessions reads no log; only the click does, and that read costs an order of magnitude more than listing a row, so it is per-row and one session at a time. A corrupt log fails on its own row and leaves the others alone.
 
-The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessions` lists sessions, `measure&sessionId=` measures one session, `top&limit=` returns cross-session results, and `cold` returns the stored sessions that no live agent owns. The route accepts `GET` and `HEAD`; other methods return `405`. Rows without a parseable token price are marked unpriced and excluded from occupancy bars and token shares.
+The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessions` lists sessions, `measure&sessionId=` measures one session, `top&limit=` returns cross-session results, `cold` returns the stored sessions that no live agent owns, and `cold-measure&sessionIds=` measures those stored sessions on demand (at most 20 per request). The route accepts `GET` and `HEAD`; other methods return `405`. Rows without a parseable token price are marked unpriced and excluded from occupancy bars and token shares.
 
 ## Safety and limits
 
@@ -62,6 +64,8 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 - A host that does not mount Connection falls back to the local guard, which decides by TCP peer, Fetch Metadata, `Origin`, and loopback `Host`.
 - Under the local guard, a process that can reach the DSH Web port is inside the trust boundary.
 - A missing token meter, an ended session, and a failed per-session measurement each return an explicit error. An ended session is out of `measure`'s scope and is listed by `cold` instead.
+- Measuring a stored session needs `ctx.sessionQuery` and an `@deepseek-ai/dsh-session` resolvable inside the host process. Without either one the row offers no measure action and nothing else changes.
+- Stored measurement runs one session at a time and releases that session's log as soon as it is measured. A single request measures at most 20 sessions.
 - A host without heuristic shadow prices shows no price difference; basic measurement is still provided.
 - The log length and the inherited prefix come from `Session.seq` and `Session.inheritedEventCount`; reading event content by seq and reading titles in bulk go through `ctx.sessionQuery` (`readSession` / `readTitleSnapshots`). When both are absent, the older host's `.events` array is the fallback.
 - The deprecated `Session.eventAt()`, `Session.snapshotEvents()`, and `Session.ownEvents()` are not called.

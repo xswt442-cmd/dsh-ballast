@@ -46,7 +46,7 @@ function brokenSession() {
  * @param nodes - ctx.tokenMeter.measure 为活跃会话报告的内容。传入
  *   pre-0.1.2-alpha.2 形状的节点（没有 heuristicTokens）来验证降级宿主。
  */
-async function mount(nodes, { connection, extra } = {}) {
+async function mount(nodes, { connection, extra, surface = SURFACE } = {}) {
   const session = fakeSession()
   const broken = brokenSession()
   const routes = new Map()
@@ -71,8 +71,13 @@ async function mount(nodes, { connection, extra } = {}) {
         tokenMeter: {
           measure(target) {
             if (target === broken) throw new Error('step event seq mismatch')
-            if (target !== session) throw new Error('measure on an unknown session')
-            return { ...SURFACE, nodes }
+            // 已存储会话的按需计量交来的是一个游离 Session，不是活跃会话对象。
+            // 它由 core/session 造出来，所以按形状识别：它报告自己的日志长度，
+            // 不是一个本夹具认识的活跃会话。
+            if (target !== session && !(typeof target.seq === 'number' && target.header)) {
+              throw new Error('measure on an unknown session')
+            }
+            return { ...surface, nodes }
           }
         },
         sessions: {
@@ -528,4 +533,128 @@ test('action=cold is read-only in its method shape too', async (t) => {
   t.after(() => host.dispose())
 
   assert.equal((await send(host.url('?action=cold'), {}, 'POST')).status, 405)
+})
+
+// ---- action=cold-measure -------------------------------------------------
+// 已存储会话的真实计量。这一节跑的是宿主端真实的那条路径：路由自己按需动态
+// 载入 `@deepseek-ai/dsh-session`，所以这些用例也证明那次 import 在宿主进程
+// 的位置解析得到——它解析不到时回答 503，而不是让整条路由失败。
+
+// 一份通过 core/session 校验的已存储日志。
+const STORED_LOG = [
+  { seq: 0, type: 'step/start', time: 1767225600000, data: { turn: 1, step: 1 } },
+  {
+    seq: 1, type: 'user/message', time: 1767225600100, surfaceOp: 'append',
+    data: { id: 'm1', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '看一下窗口占用' }] }
+  }
+]
+
+const storedHeader = (id) => ({
+  version: 4, id, createdAt: 1767225600000, cwd: '/work/stored', parentSession: '', isSeeded: false
+})
+
+/** 一个存储宿主：查询服务按 id 回答真实的日志。 */
+function storedMeasureHost(readSession) {
+  return {
+    sessionPersistence: { list: async () => [{ header: storedHeader('old-1'), sizeBytes: 2048, eventCount: 2, revision: 2 }] },
+    sessionQuery: {
+      readSession: readSession || (async (id) => ({
+        session: storedHeader(id), inheritedEventCount: 0, events: STORED_LOG
+      })),
+      readTitleSnapshots: async () => []
+    }
+  }
+}
+
+test('action=cold-measure prices a stored session from its complete log', async (t) => {
+  // 已存储日志有自己的 surface：节点按这份日志的 seq 索引，所以夹具里那三条
+  // 活跃会话的节点对它不适用。
+  const storedSurface = {
+    logRevision: 3,
+    baseline: { kind: 'estimated', tokens: 40 },
+    surfaceDeltaTokens: 0,
+    totalTokens: 40,
+    surfaceTokens: 40,
+    nodes: [{ seq: 1, tokens: 40, heuristicTokens: 40 }]
+  }
+  const host = await mount(storedSurface.nodes, {
+    extra: storedMeasureHost(),
+    surface: storedSurface
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold-measure&sessionIds=old-1'))
+  assert.equal(res.status, 200)
+  assert.equal(res.body.ok, true)
+  assert.equal(res.body.failedCount, 0)
+  const [entry] = res.body.sessions
+  assert.equal(entry.sessionId, 'old-1')
+  // 逐条归因来自完整日志：user/message 那一行带着它自己的摘要。
+  assert.equal(entry.measurement.rows[0].type, 'user/message')
+  assert.equal(entry.measurement.rows[0].preview.text, '看一下窗口占用')
+})
+
+test('action=cold-measure reports a corrupt log as one failed row', async (t) => {
+  // seq 不连续的日志不能重放。那是这一行自己的事，整个请求仍然成功。
+  const broken = [{ seq: 9, type: 'user/message', time: 1, surfaceOp: 'append',
+    data: { id: 'm', role: 'user', source: { kind: 'user' }, content: [] } }]
+  const host = await mount(SURFACE.nodes, {
+    extra: storedMeasureHost(async (id) => ({ session: storedHeader(id), inheritedEventCount: 0, events: broken }))
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold-measure&sessionIds=old-1'))
+  assert.equal(res.status, 200)
+  assert.equal(res.body.ok, true)
+  assert.deepEqual(res.body.sessions, [])
+  assert.equal(res.body.failedCount, 1)
+  assert.match(res.body.failures[0].error, /seq/)
+})
+
+test('action=cold-measure requires session ids', async (t) => {
+  const host = await mount(SURFACE.nodes, { extra: storedMeasureHost() })
+  t.after(() => host.dispose())
+
+  // 缺参数与「什么都不测」是两个不同的请求，所以前者是 400。
+  for (const query of ['?action=cold-measure', '?action=cold-measure&sessionIds=', '?action=cold-measure&sessionIds=,,']) {
+    const res = await send(host.url(query))
+    assert.equal(res.status, 400, query)
+    assert.equal(res.body.code, 'session_required')
+  }
+})
+
+test('action=cold-measure bounds how many logs one request may read', async (t) => {
+  const read = []
+  const host = await mount(SURFACE.nodes, {
+    extra: storedMeasureHost(async (id) => {
+      read.push(id)
+      return { session: storedHeader(id), inheritedEventCount: 0, events: STORED_LOG }
+    })
+  })
+  t.after(() => host.dispose())
+
+  const many = Array.from({ length: 40 }, (_, i) => `s${i}`).join(',')
+  const res = await send(host.url(`?action=cold-measure&sessionIds=${many}`))
+  assert.equal(res.status, 200)
+  // 每个 id 都要把一份完整日志读进内存，所以上限与 top 的 limit 同样在这里。
+  assert.ok(read.length <= 20, `a single request read ${read.length} logs`)
+  assert.equal(read.length, 20)
+})
+
+test('action=cold-measure answers unavailable on a host without the query service', async (t) => {
+  // 跨版本没有查询服务时该行不出现计量入口。503 让界面撤掉入口，而不是显示
+  // 一个可以反复点的失败按钮。
+  const host = await mount(SURFACE.nodes, { extra: { sessionPersistence: { list: async () => [] } } })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold-measure&sessionIds=old-1'))
+  assert.equal(res.status, 503)
+  assert.equal(res.body.code, 'unavailable')
+})
+
+test('action=cold-measure is read-only in its method shape too', async (t) => {
+  const host = await mount(SURFACE.nodes, { extra: storedMeasureHost() })
+  t.after(() => host.dispose())
+
+  assert.equal((await send(host.url('?action=cold-measure&sessionIds=old-1'), {}, 'POST')).status, 405)
 })

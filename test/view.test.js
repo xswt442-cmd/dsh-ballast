@@ -27,7 +27,8 @@ const PANEL_SRC = region(CLIENT_SRC, PANEL_MARK, PLUGIN_MARK)
 // 但它们正是面板显示错误数据的来源，所以这里固定让它们保持正确的结构。
 const LOAD_MEASURE_SRC = region(PANEL_SRC, 'const loadMeasure =', 'const loadTop =')
 const LOAD_TOP_SRC = region(PANEL_SRC, 'const loadTop =', 'const loadCold =')
-const LOAD_COLD_SRC = region(PANEL_SRC, 'const loadCold =', 'const loadHostView =')
+const LOAD_COLD_SRC = region(PANEL_SRC, 'const loadCold =', 'const measureColdRow =')
+const LOAD_COLD_MEASURE_SRC = region(PANEL_SRC, 'const measureColdRow =', 'const loadHostView =')
 const REFRESH_SRC = region(PANEL_SRC, 'const refresh =', 'React.useEffect(')
 
 const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
@@ -289,7 +290,8 @@ test('every read owns its network failure instead of raising it into the page', 
   // fetch() 被拒绝——DSH 重启、HMR 断开 socket——必须成为每条读取自己的
   // 失败：未捕获会成为浏览器未处理的拒绝，面板会继续把旧快照显示成一次
   // 成功的读取。
-  for (const [name, src] of [['loadMeasure', LOAD_MEASURE_SRC], ['loadTop', LOAD_TOP_SRC], ['loadCold', LOAD_COLD_SRC]]) {
+  for (const [name, src] of [['loadMeasure', LOAD_MEASURE_SRC], ['loadTop', LOAD_TOP_SRC],
+    ['loadCold', LOAD_COLD_SRC], ['measureColdRow', LOAD_COLD_MEASURE_SRC]]) {
     assert.match(src, /try \{[\s\S]*?await fetch\(/, `${name} must call fetch inside a try`)
     const caught = src.slice(src.indexOf('} catch'))
     assert.ok(caught.length > 0, `${name} never catches its fetch`)
@@ -308,14 +310,22 @@ test('a superseded stored-session read still hands its spinner back', () => {
   for (const [guard, body] of guards) {
     assert.match(body, /coldLoading: false/, `the guard "${guard.trim()}" must release coldLoading`)
   }
+  // 已存储会话的按需计量有同一个形状：它在检查代号之前取走 `coldMeasuring`，
+  // 被取代的读取不交回就会让入口永远停在「计量中」。
+  const measureGuards = [...LOAD_COLD_MEASURE_SRC.matchAll(/if \(gen !== generation\.current\) \{([\s\S]*?)\}/g)]
+  assert.ok(measureGuards.length >= 2, 'measureColdRow must guard both its failure and its answer')
+  for (const [guard, body] of measureGuards) {
+    assert.match(body, /coldMeasuring: false/, `the guard "${guard.trim()}" must release coldMeasuring`)
+  }
 })
 
 test('a queued read is either awaited or explicitly fire-and-forget', () => {
   // 未标记的调用看起来像疏忽；`void` 表明读取入队后处理函数就结束了，
   // 加载器自己负责错误。
-  const callSites = PANEL_SRC.replace(/const (loadMeasure|loadTop|loadCold|loadHostView|refresh) = React\.useCallback/g, '')
-  const found = [...callSites.matchAll(/(\S+\s+)?\b(loadMeasure|loadTop|loadCold|loadHostView|refresh)\(/g)]
-  assert.ok(found.length >= 7, 'the panel should have call sites for all its reads')
+  const names = 'loadMeasure|loadTop|loadCold|loadHostView|measureColdRow|refresh'
+  const callSites = PANEL_SRC.replace(new RegExp(`const (${names}) = React\\.useCallback`, 'g'), '')
+  const found = [...callSites.matchAll(new RegExp(`(\\S+\\s+)?\\b(${names})\\(`, 'g'))]
+  assert.ok(found.length >= 8, 'the panel should have call sites for all its reads')
   for (const match of found) {
     const lead = (match[1] || '').trim()
     assert.ok(lead === 'void' || lead === 'await',
