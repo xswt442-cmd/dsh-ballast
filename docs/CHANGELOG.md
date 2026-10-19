@@ -3,6 +3,13 @@
 Release notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.4.1 - 2026-10-19
+
+### 维护
+
+- 兼容矩阵覆盖 `0.2.1-rc.2`：Windows 与 Linux 各启动一次真实宿主，断言与既有版本相同的 measurement 契约。本插件读取的宿主服务面在该版本线上未变。
+- 平台与兼容性章节写明 DSH Desktop 同样受支持：Desktop 是同一 web 应用的 Electron 外壳，共用 `webServer`、客户端席位、launcher 与 `DSH_HOME`。
+
 ## 0.4.0 - 2026-09-30
 
 ### 变更

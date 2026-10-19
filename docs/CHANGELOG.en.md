@@ -3,6 +3,13 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.4.1 - 2026-10-19
+
+### Maintenance
+
+- The compatibility matrix covers `0.2.1-rc.2`: one real boot on Windows and one on Linux, asserting the same measurement contract as the existing versions. The host service surface this plugin reads is unchanged on that line.
+- The platform section states that DSH Desktop is supported too: Desktop is an Electron shell around the same web application, sharing the `webServer`, the client seats, the launcher, and `DSH_HOME`.
+
 ## 0.4.0 - 2026-09-30
 
 ### Changed
