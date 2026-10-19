@@ -16,10 +16,13 @@ DSH Web 上下文窗口归因插件。它按消息条目显示当前 surface 的
 ## 功能
 
 - 按 token 占用列出用户消息、助手消息和工具结果。正文折叠空白后截断，工具结果显示工具名，推理块和图像只计数不内联原文。
+- 当前会话的每一行带一个定位按钮：点击后聊天窗口滚动到那一条并高亮。按钮只在聊天窗口显示的就是被测会话时出现。
+- 定位靠聊天窗口 DOM 上的内部属性完成，不是公开接口。宿主换掉这些属性时按钮不出现或点击后什么也不做，条目照常列出。
 - 显示当前路由价格，host 同时提供 heuristic 影子价时标出价差。价差表示图像可能经过视觉 token 重定价，不表示异常或内容重要性。
 - 显示按消息类型聚合的 token 占比，以及当前 host 上各 live session 中最重的条目。
 - 显示 provider usage、下一次请求的窗口压力，以及 system/tools/messages 的估算构成。估算构成与 provider usage 锚点口径不同，面板不把两者相加。
 - 列出当前 host 的会话：进程内活着的，以及已存储但没有 live agent 的。会话标题缺失时显示工作区目录名与 session ID。
+- 已存储会话可以按需计量：从完整事件日志得到与活跃会话同一口径的占用，而不是只显示投影缓存里可能已过期的数字。
 - 面板头部标出应答的宿主进程（PID 与端口），会话计数只统计该进程内的会话。
 - 侧栏每个会话行的悬浮卡片有一行入口，点击后打开该会话的面板。
 - 该行显示插件已取到的该会话占用：surface 总量与最重条目，只取到会话列表时显示日志条数。
@@ -47,8 +50,9 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 
 - **当前会话**：按条目查看当前 surface 的占用、类型、时间和摘要。已被 compaction `replace` 折叠的旧 `append` 条目不显示。
 - **跨会话 Top**：按需为当前 host 的每个 live session 计量一次，并按最重条目排序。读取成本随 live session 数量增加。单个会话计量失败不影响其他会话的结果。该视图同时列出已存储但没有 live agent 的会话，按占盘大小排序，并给出各自投影缓存里的上下文压力。日志条数、字节数与 revision 来自持久化快照，token 数字来自投影缓存，因此可能停留在该会话最后一次写入时的值；标题来自一次批量日志读取。
+- 已存储的每一行有一个计量按钮：点击后读取该会话的完整事件日志，按活跃会话的同一口径计量，并显示 surface 总量与条目数。列出会话本身不读日志，只有点击才读盘，而这一次读取的成本比列出一行高一个量级，所以由用户逐行触发、一次只测一个会话。损坏的日志在它那一行显示为失败，其余行不受影响。
 
-面板通过同源只读接口 `/dsh-ballast/api` 获取数据：`sessions` 列出会话，`measure&sessionId=` 计量一个会话，`top&limit=` 返回跨会话结果，`cold` 返回已存储但没有 live agent 的会话。接口只接受 `GET` 和 `HEAD`，其他方法返回 `405`。未提供可解析 token 价格的条目显示为未计价，不参与占用条或 token 占比。
+面板通过同源只读接口 `/dsh-ballast/api` 获取数据：`sessions` 列出会话，`measure&sessionId=` 计量一个会话，`top&limit=` 返回跨会话结果，`cold` 返回已存储但没有 live agent 的会话，`cold-measure&sessionIds=` 按需计量这些已存储会话（一次最多 20 个）。接口只接受 `GET` 和 `HEAD`，其他方法返回 `405`。未提供可解析 token 价格的条目显示为未计价，不参与占用条或 token 占比。
 
 ## 安全与边界
 
@@ -60,9 +64,11 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 - 未挂载 Connection 的宿主回退到本地守卫，按 TCP 对端、Fetch Metadata、`Origin` 和 loopback `Host` 判定。
 - 本地守卫模式下，能连接 DSH Web 端口的本机进程在信任边界内。
 - token meter 未注入、会话已结束或单次计量失败时返回明确错误。已结束会话不在 `measure` 的范围内，由 `cold` 列出。
+- 已存储会话的真实计量需要 `ctx.sessionQuery` 与宿主进程内可解析的 `@deepseek-ai/dsh-session`。两者任一缺席时该行不出现计量入口，其余功能不受影响。
+- 已存储会话的计量按顺序一次一个会话，读完立即释放该会话的日志。单次请求最多计量 20 个会话。
 - host 缺少 heuristic 影子价时不显示价差，基础计量仍然提供。
 - 日志长度与继承前缀取 `Session.seq` 与 `Session.inheritedEventCount`；按 seq 取事件内容与批量标题走 `ctx.sessionQuery`（`readSession` / `readTitleSnapshots`）。两者都缺席时回落到旧 host 的 `.events` 数组。
-- 已废弃的 `Session.eventAt()`、`Session.snapshotEvents()` 与 `Session.ownEvents()` 一次都不调用，由测试直接断言源码文本与行为两条路径。
+- 已废弃的 `Session.eventAt()`、`Session.snapshotEvents()` 与 `Session.ownEvents()` 不被调用。
 
 ## 平台与兼容性
 
@@ -71,19 +77,13 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 | DSH | `>=0.1.5-rc.3` |
 | Node.js | `>=20` |
 
+DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.1.5-rc.3`、`0.1.7-rc.2`、`0.2.0-rc.1` 与 `0.2.1-rc.2`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
+
 RC1 的 `seq`、`inheritedEventCount`、`events` 均受支持：有 `ctx.sessionQuery` 时按 seq 取事件内容，没有时用旧的 `.events` 数组。projection 缺失时不显示 provider usage 与构成估算，逐条 token 计量仍然提供。`contextPressure` 缺少 `contextWindow` 时留空，不从别处推断。
 
-## 开发与验证
+## 开发
 
-开发仓库以符号链接挂入正在运行的 DSH profile 时，多文件编辑期间的 HMR 可能载入中间状态并使实例退出。验证命令：
-
-```powershell
-npm test
-npm run docs:check
-Get-ChildItem lib/*.js | ForEach-Object { node --check $_.FullName }
-node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
-npm pack --dry-run
-```
+验证命令见仓库根目录的 `AGENTS.md`，发布步骤见 `docs/development/RELEASE.md`。
 
 ## License
 

@@ -3,6 +3,22 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.5.0 - 2026-10-19
+
+### Added
+
+- Every row of the current session carries a locate button; clicking it scrolls the chat to that entry and highlights it. The button appears only while the chat is showing the session being measured.
+- Locating reads internal chat DOM attributes rather than a public interface. When the host stops providing them the button is absent, and a click can only reach the first entry of the same turn; the rest of the panel is unaffected.
+- Every stored row carries a measure action: it reads that session's complete event log and reports its surface total and entry count by the same accounting as a live session, replacing the possibly stale figures the projection cache held. Listing the sessions reads no log; measurement is triggered per row and runs one session at a time.
+- That measurement needs `ctx.sessionQuery` and an `@deepseek-ai/dsh-session` resolvable inside the host process; without either one the row offers no action. A corrupt log fails on its own row and leaves the others alone, and one request measures at most 20 sessions.
+
+## 0.4.1 - 2026-10-19
+
+### Maintenance
+
+- The compatibility matrix covers `0.2.1-rc.2`: one real boot on Windows and one on Linux, asserting the same measurement contract as the existing versions. The host service surface this plugin reads is unchanged on that line.
+- The platform section states that DSH Desktop is supported too: Desktop is an Electron shell around the same web application, sharing the `webServer`, the client seats, the launcher, and `DSH_HOME`.
+
 ## 0.4.0 - 2026-09-30
 
 ### Changed

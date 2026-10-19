@@ -28,6 +28,10 @@
 - `Unreleased` records what a reader other than the author would notice. Deferred work and "X was left alone because it needs a product call" are handoff notes, not changelog entries.
 - Do not name another repository. The test is a reader who cloned only this one: a sentence that only parses if they also know what a sibling checkout does cannot be verified and adds nothing — state what this repository does. `dsh-mini-utility-dock` is the single exception, and only where it genuinely is the subject: it is a dependency this package declares, and these blocks are synced from it.
 
+## Pull requests
+
+- `.github/PULL_REQUEST_TEMPLATE.md` owns the PR body's sections and language order; `.agents/skills/pr/SKILL.md` drafts them from the actual diff. Neither is a second format.
+
 ## Verify
 
 ```sh

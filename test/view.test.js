@@ -2,16 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-// The client ships as one self-contained classic script, so its presentation
-// logic cannot be imported. Grepping the bundle text for a field name is not
-// enough either: it keeps passing when a label goes wrong, when a helper stops
-// being called, or when the field only appears in a comment. So extract the
-// React-free view-helpers region, evaluate it, and assert what the panel says.
+// 客户端以单个自包含经典脚本发布，展示逻辑无法 import。对 bundle 文本匹配
+// 字段名也不够：标签出错、辅助函数不再被调用、字段只出现在注释里时，文本
+// 匹配仍然通过。所以这里抽出不依赖 React 的视图辅助函数区域，求值它，并
+// 断言面板显示了什么。
 
 const CLIENT_SRC = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
-const VIEW_MARK = '// ---- view helpers'
-const PANEL_MARK = '// ---- panel'
-const PLUGIN_MARK = '// ---- plugin'
+const VIEW_MARK = '// ---- 视图辅助函数'
+const PANEL_MARK = '// ---- 面板'
+const PLUGIN_MARK = '// ---- 插件'
 
 function region(src, from, to) {
   const start = src.indexOf(from)
@@ -24,13 +23,12 @@ function region(src, from, to) {
 const VIEW_SRC = region(CLIENT_SRC, VIEW_MARK, PANEL_MARK)
 const PANEL_SRC = region(CLIENT_SRC, PANEL_MARK, PLUGIN_MARK)
 
-// The read paths are async and stateful, so unlike the view helpers they cannot
-// be evaluated without React and a network. They are still where the panel gets
-// its wrong-data-on-screen bugs, so the structure that keeps them honest is
-// pinned here.
+// 读取路径是异步且有状态的，与视图辅助函数不同，没有 React 和网络无法求值。
+// 但它们正是面板显示错误数据的来源，所以这里固定让它们保持正确的结构。
 const LOAD_MEASURE_SRC = region(PANEL_SRC, 'const loadMeasure =', 'const loadTop =')
 const LOAD_TOP_SRC = region(PANEL_SRC, 'const loadTop =', 'const loadCold =')
-const LOAD_COLD_SRC = region(PANEL_SRC, 'const loadCold =', 'const loadHostView =')
+const LOAD_COLD_SRC = region(PANEL_SRC, 'const loadCold =', 'const measureColdRow =')
+const LOAD_COLD_MEASURE_SRC = region(PANEL_SRC, 'const measureColdRow =', 'const loadHostView =')
 const REFRESH_SRC = region(PANEL_SRC, 'const refresh =', 'React.useEffect(')
 
 const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
@@ -38,16 +36,16 @@ const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
   'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge',
   'releaseLoading', 'factSummary', 'sizeLabel', 'coldPressure']
 
-// Keep copy assertions deterministic across developer machines and CI. Node 24
-// exposes navigator.language, so otherwise the evaluated browser fallback uses
-// the runner locale (en-US on GitHub, zh-CN on the maintainer machine).
+// 让文案断言在开发机与 CI 上保持一致。Node 24 暴露 navigator.language，
+// 否则求值出的浏览器语言回退会使用运行器语言（GitHub 上是 en-US，维护者
+// 机器上是 zh-CN）。
 const view = new Function(`const navigator = { language: 'zh-CN' }
 ${VIEW_SRC}
 return { ${HELPERS.join(', ')} }`)()
 
 test('the view region is presentation only, so evaluating it is fair', () => {
-  // If the region ever reaches for React, the DOM or the network, the harness
-  // below stops being a unit test; say so instead of failing obscurely.
+  // 如果这个区域访问 React、DOM 或网络，下面的测试装置就不再是单元
+  // 测试；在这里直接说明，而不是让失败难以理解。
   assert.ok(!/React\.|document\.|window\.|fetch\(/.test(VIEW_SRC),
     'view helpers must stay free of React, DOM and I/O')
   for (const name of HELPERS) {
@@ -92,15 +90,15 @@ test('a clipped preview says so and names the pre-clip length', () => {
   assert.equal(view.textHint({ preview: { text: 'abc' } }), 'abc')
   assert.equal(view.textHint({ preview: { text: 'abc', truncated: true, chars: 512 } }),
     'abc（已截断，原文 512 字符）')
-  // chars is payload metadata the host may omit; the note must not become "原文 — 字符".
+  // chars 是宿主可能省略的载荷元数据；提示不能变成“原文 — 字符”。
   assert.equal(view.textHint({ preview: { text: 'abc', truncated: true } }),
     'abc（已截断，原文 — 字符）')
 })
 
 test('the seq tooltip renders only a time the plugin can read unambiguously', () => {
   assert.match(view.timeLabel('2026-09-01T05:40:21.000Z'), /2026/)
-  // A bare number might be seconds or milliseconds and the meter does not know
-  // which; rendering either guess would put a 1970 timestamp on screen.
+  // 裸数字可能是秒也可能是毫秒，计量服务不知道是哪一种；猜任何一个都会在
+  // 屏幕上显示 1970 年的时间。
   for (const junk of [null, undefined, '', 'not a time', {}, Date.parse('2026-09-01T05:40:21.000Z')]) {
     assert.equal(view.timeLabel(junk), '', `${String(junk)} must not render a time`)
   }
@@ -115,23 +113,23 @@ test('a baseline with no anchor is not given a token count', () => {
 
 test('the shadow-price badge matches what the host actually omitted', () => {
   assert.equal(view.shadowBadge({ shadowPricing: 'available' }), null)
-  // An empty surface cannot tell the two host shapes apart: nothing to warn about.
+  // 空 surface 无法区分两种宿主形状：没有需要警告的内容。
   assert.equal(view.shadowBadge({ shadowPricing: 'unknown' }), null)
   assert.equal(view.shadowBadge({ shadowPricing: 'absent' }).label, '无影子价')
   const partial = view.shadowBadge({ shadowPricing: 'partial' })
   assert.equal(partial.label, '影子价不全')
-  // The absent wording blames the host version, which is false for a partial surface.
+  // “宿主不提供”的措辞对部分缺失的 surface 是错的。
   assert.ok(!partial.title.includes('此 DSH 宿主不提供'), 'partial must not claim the host lacks shadow pricing')
 })
 
 test('an unpriced row gets no bar, and the smallest priced row stays visible', () => {
   assert.equal(view.barWidth({ tokens: 1000 }, 1000), '100%')
   assert.equal(view.barWidth({ tokens: 1 }, 1000), '2%')
-  // A 0.1% sliver would read as "this row is cheap"; the truth is "no number".
+  // 0.1% 的细条会读成“这一行很便宜”；真相是“没有数字”。
   assert.equal(view.barWidth({ tokens: null }, 1000), '0%')
   assert.equal(view.barWidth({ tokens: '900' }, 1000), '0%')
   assert.equal(view.barWidth({ tokens: NaN }, 1000), '0%')
-  // With nothing measured, every row is 0% rather than a division by zero.
+  // 没有可计量内容时，每一行都是 0%，而不是除零。
   assert.equal(view.barWidth({ tokens: 5 }, 0), '0%')
   assert.equal(view.barWidth({ tokens: 5 }, null), '0%')
 })
@@ -139,11 +137,11 @@ test('an unpriced row gets no bar, and the smallest priced row stays visible', (
 test('the share legend names the type, the fraction and the volume', () => {
   const line = view.shareLabel({ type: 'user/message', tokens: 4321, count: 3, share: 0.25 })
   assert.equal(line, '用户 25.0% · 4,321 tokens / 3 条')
-  // An unknown type label falls through to the raw type, like the row list does.
+  // 未知类型标签会像行列表一样落到原始类型。
   assert.match(view.shareLabel({ type: 'future/kind', tokens: 0, count: 0, share: 0 }), /^future\/kind 0\.0%/)
   assert.equal(view.sharePct(0.256, 1), '25.6')
   assert.equal(view.sharePct(0.256, 0), '26')
-  // share is host-computed; a missing one must not paint "NaN%" as a bar width.
+  // share 由宿主计算；缺失的值不能把“NaN%”画成条宽。
   for (const junk of [null, undefined, NaN, '0.4', {}]) {
     assert.equal(view.sharePct(junk, 2), '0', `${String(junk)} is not a share`)
   }
@@ -163,7 +161,7 @@ test('snapshot age is reported only when both clocks are readable', () => {
   assert.equal(view.snapshotAge(t, t + 3_000), '3 秒前')
   assert.equal(view.snapshotAge(t, t + 150_000), '2 分钟前')
   assert.equal(view.snapshotAge(t, t + 7_200_000), '2 小时前')
-  // A clock that went backwards means the page time is not trustworthy; say nothing.
+  // 时钟倒退说明页面时间不可信；什么都不说。
   assert.equal(view.snapshotAge(t, t - 1), '')
   for (const junk of [null, undefined, 'now', {}]) {
     assert.equal(view.snapshotAge(junk, t), '', `${String(junk)} is not a receive time`)
@@ -172,16 +170,15 @@ test('snapshot age is reported only when both clocks are readable', () => {
 })
 
 test('a session fact line names only what the host measured', () => {
-  // Nothing cached: the hover seat must offer its action and no number at all,
-  // because a dash or a 0 would read as a measurement the plugin never took.
+  // 没有缓存：悬停席位只提供动作，不显示任何数字，因为破折号或 0 会读成
+  // 插件从未做过的计量。
   assert.equal(view.factSummary(null), '')
   assert.equal(view.factSummary(undefined), '')
   assert.equal(view.factSummary({}), '')
-  // The session list carries no token figure; its log length is the only real
-  // thing it does carry, and it is a fallback rather than a headline.
+  // 会话列表不带 token 数字；日志长度是它唯一真正携带的内容，而且它是
+  // 回退项，不是主信息。
   assert.equal(view.factSummary({ eventCount: 12 }), '日志 12 条')
-  // Measured facts outrank the log length, and a non-numeric host field is not
-  // turned into a number.
+  // 计量事实优先于日志长度，宿主给出的非数字字段不会被转成数字。
   assert.equal(view.factSummary({ surfaceTokens: 1234, eventCount: 12 }), 'surface 1,234')
   assert.equal(view.factSummary({
     surfaceTokens: 1234, eventCount: 12, heaviest: { seq: 7, tokens: 900 }
@@ -224,16 +221,15 @@ test('the panel calls every helper instead of formatting inline', () => {
     'bar sizing must live in barWidth, not inline')
   assert.ok(!/>0 \? '\+' : ''/.test(PANEL_SRC),
     'sign handling must live in fmtSigned, not inline')
-  // measure_failed and top_partial carry the reason the host threw; a bare code
-  // tells the user nothing, so every api path must prefer the message.
+  // measure_failed 与 top_partial 携带宿主抛出的原因；只给一个 code 对用户
+  // 没有帮助，所以每条 api 路径都必须优先显示消息。
   const withMessage = PANEL_SRC.match(/body\.error \|\| body\.code/g) || []
   assert.equal(withMessage.length, 4,
     'every api path should surface the host error message')
 })
 
 test('the panel surfaces every row field the meter emits', () => {
-  // Pinned against the panel body: a field that only survives in dead code or a
-  // comment must not pass this.
+  // 对照面板主体固定：只活在死代码或注释里的字段不能通过。
   for (const field of ['row.priceDelta', 'row.routePriced', 'row.surfaceOp',
     'row.preview', 'row.tokens', 'row.seq', 'row.time', 's.title']) {
     assert.ok(PANEL_SRC.includes(field), `panel never reads ${field}`)
@@ -249,9 +245,8 @@ test('the panel surfaces the aggregate and the cross-session result', () => {
 })
 
 test('the panel surfaces the stored half of the host view', () => {
-  // A stored session has no live Agent, so none of the live row fields exist
-  // for it: the panel has to read the persistence snapshot instead, and it has
-  // to render the stored half even while the live scan is still running.
+  // 已存储会话没有活跃 Agent，活跃行的字段对它都不存在：面板必须读取
+  // 持久化快照，并且必须在活跃扫描仍在运行时也渲染存储部分。
   for (const field of ['state.cold', 'state.coldLoading', 'state.coldStoredAvailable',
     'entry.sizeBytes', 'entry.eventCount', 'coldPressure(entry)']) {
     assert.ok(PANEL_SRC.includes(field), `panel never reads ${field}`)
@@ -278,8 +273,8 @@ test('coldPressure is silent without a pressure projection', () => {
   assert.equal(view.coldPressure({}), null)
   assert.equal(view.coldPressure({ projections: null }), null)
   assert.equal(view.coldPressure({ projections: { tokenUsage: { outputTokens: 5 } } }), null)
-  // A stored row carries whatever the cache held at that session's last write,
-  // so the line is the same one the live view uses, wording included.
+  // 已存储行携带的是缓存在该会话最后写入时的内容，所以这一行与活跃视图
+  // 使用同一条，措辞也相同。
   assert.equal(view.coldPressure({
     projections: { contextPressure: { pressureTokens: 400, projectedTokens: 455, contextWindow: 128000 } }
   }), '下次请求 455 / 128,000（0.4%）')
@@ -292,10 +287,11 @@ test('coldPressure falls back to the anchored reading when the projection has no
 })
 
 test('every read owns its network failure instead of raising it into the page', () => {
-  // Only res.json() was guarded before. A rejected fetch() — DSH restarting,
-  // HMR dropping the socket — became a browser unhandled rejection, and the
-  // panel went on showing the previous snapshot as if the read had worked.
-  for (const [name, src] of [['loadMeasure', LOAD_MEASURE_SRC], ['loadTop', LOAD_TOP_SRC], ['loadCold', LOAD_COLD_SRC]]) {
+  // fetch() 被拒绝——DSH 重启、HMR 断开 socket——必须成为每条读取自己的
+  // 失败：未捕获会成为浏览器未处理的拒绝，面板会继续把旧快照显示成一次
+  // 成功的读取。
+  for (const [name, src] of [['loadMeasure', LOAD_MEASURE_SRC], ['loadTop', LOAD_TOP_SRC],
+    ['loadCold', LOAD_COLD_SRC], ['measureColdRow', LOAD_COLD_MEASURE_SRC]]) {
     assert.match(src, /try \{[\s\S]*?await fetch\(/, `${name} must call fetch inside a try`)
     const caught = src.slice(src.indexOf('} catch'))
     assert.ok(caught.length > 0, `${name} never catches its fetch`)
@@ -306,23 +302,30 @@ test('every read owns its network failure instead of raising it into the page', 
 })
 
 test('a superseded stored-session read still hands its spinner back', () => {
-  // `loadCold` takes `coldLoading` before it checks its stamp, so a read the
-  // panel has moved past has to clear it on the way out. Returning without doing
-  // so leaves the stored half reading forever: the rows and the empty state are
-  // both behind that flag, so neither ever renders.
+  // `loadCold` 在检查代号之前就取走 `coldLoading`，所以面板已经越过的读取
+  // 必须在退出时清除它。否则存储部分永远停在读取中：行与空状态都在这个标志
+  // 后面，两者都不会渲染。
   const guards = [...LOAD_COLD_SRC.matchAll(/if \(gen !== generation\.current\) \{([\s\S]*?)\}/g)]
   assert.ok(guards.length >= 2, 'loadCold must guard both its failure and its answer')
   for (const [guard, body] of guards) {
     assert.match(body, /coldLoading: false/, `the guard "${guard.trim()}" must release coldLoading`)
   }
+  // 已存储会话的按需计量有同一个形状：它在检查代号之前取走 `coldMeasuring`，
+  // 被取代的读取不交回就会让入口永远停在「计量中」。
+  const measureGuards = [...LOAD_COLD_MEASURE_SRC.matchAll(/if \(gen !== generation\.current\) \{([\s\S]*?)\}/g)]
+  assert.ok(measureGuards.length >= 2, 'measureColdRow must guard both its failure and its answer')
+  for (const [guard, body] of measureGuards) {
+    assert.match(body, /coldMeasuring: false/, `the guard "${guard.trim()}" must release coldMeasuring`)
+  }
 })
 
 test('a queued read is either awaited or explicitly fire-and-forget', () => {
-  // An unmarked call reads as an oversight; `void` is what says the handler is
-  // done once the read is queued and the loader owns its own errors.
-  const callSites = PANEL_SRC.replace(/const (loadMeasure|loadTop|loadCold|loadHostView|refresh) = React\.useCallback/g, '')
-  const found = [...callSites.matchAll(/(\S+\s+)?\b(loadMeasure|loadTop|loadCold|loadHostView|refresh)\(/g)]
-  assert.ok(found.length >= 7, 'the panel should have call sites for all its reads')
+  // 未标记的调用看起来像疏忽；`void` 表明读取入队后处理函数就结束了，
+  // 加载器自己负责错误。
+  const names = 'loadMeasure|loadTop|loadCold|loadHostView|measureColdRow|refresh'
+  const callSites = PANEL_SRC.replace(new RegExp(`const (${names}) = React\\.useCallback`, 'g'), '')
+  const found = [...callSites.matchAll(new RegExp(`(\\S+\\s+)?\\b(${names})\\(`, 'g'))]
+  assert.ok(found.length >= 8, 'the panel should have call sites for all its reads')
   for (const match of found) {
     const lead = (match[1] || '').trim()
     assert.ok(lead === 'void' || lead === 'await',
@@ -331,21 +334,20 @@ test('a queued read is either awaited or explicitly fire-and-forget', () => {
 })
 
 test('a refresh runs under one generation and honours the newest target', () => {
-  // The sessions read is only half a refresh; the measurement that follows it
-  // belongs to the same intent, so one stamp covers both.
+  // 会话读取只是刷新的一半；随后的计量属于同一个意图，所以一个代号覆盖
+  // 两者。
   assert.match(REFRESH_SRC, /const gen = \+\+generation\.current/, 'refresh must stamp a generation')
   assert.match(REFRESH_SRC, /gen !== generation\.current/, 'refresh must drop a superseded answer')
-  // The refresh reads the live state through `stateRef`, never the state its
-  // closure captured: a session picked mid-read would be lost to the older one.
+  // 刷新通过 `stateRef` 读取最新状态，而不是闭包捕获的状态：读取途中选中的
+  // 会话会被旧状态丢掉。
   assert.ok(!/state\.selected/.test(REFRESH_SRC), 'refresh must not trust the captured selection')
   assert.ok(!/state\.view/.test(REFRESH_SRC), 'refresh must not trust the captured view')
   assert.match(REFRESH_SRC, /stateRef\.current/, 'refresh must read the newest selection and view')
   assert.match(REFRESH_SRC, /\}, \[loadMeasure, loadHostView\]\)/,
     'refresh must depend only on its loaders')
-  // `loading` disables the refresh button, so it has to be released — but only
-  // by the refresh that owns it. Closing and reopening the panel starts a
-  // second refresh; the first one returning late must not hand back a spinner
-  // the newer read is still holding.
+  // `loading` 会禁用刷新按钮，所以必须释放——但只能由持有它的那次刷新
+  // 释放。关闭再打开面板会启动第二次刷新；第一次晚返回时不能交回新读取仍在
+  // 持有的加载状态。
   assert.match(REFRESH_SRC, /loadingOwner\.current = gen/, 'a refresh takes ownership of the spinner')
   assert.ok(!/loading: false/.test(REFRESH_SRC),
     'refresh must not clear loading inline; ownership decides who may')
@@ -354,8 +356,8 @@ test('a refresh runs under one generation and honours the newest target', () => 
 })
 
 test('a refresh releases the spinner only while it owns it', () => {
-  // Only the refresh that owns `loading` may clear it: a stale read must not
-  // re-enable the button while a newer one is still in flight.
+  // 只有持有 `loading` 的刷新可以清除它：过期的读取不能在新读取仍在进行时
+  // 重新启用按钮。
   const owner = { current: 7 }
   assert.deepEqual(view.releaseLoading(owner, 7), { loading: false })
   assert.equal(owner.current, 0, 'releasing hands ownership back')
@@ -369,17 +371,14 @@ test('a refresh releases the spinner only while it owns it', () => {
 })
 
 test('unmounting the panel invalidates reads that are still in flight', () => {
-  // HMR or plugin dispose removes the slot while fetches are pending: those
-  // closures hold setState for a component that is gone. Bumping the
-  // generation makes every pending read stale at its own guard.
+  // HMR 或插件销毁会在 fetch 未完成时移除槽位：那些闭包持有已不存在组件的
+  // setState。增加代号让每个待完成的读取在自己的守卫处失效。
   const cleanup = PANEL_SRC.slice(PANEL_SRC.indexOf('return () => {'))
   assert.match(cleanup, /generation\.current \+= 1/, 'cleanup must invalidate pending reads')
   assert.match(cleanup, /loadingOwner\.current = 0/, 'cleanup must drop the spinner owner')
-  // Invalidation alone is not enough: a stale read that settles after unmount
-  // must return *before* scheduling a state update on the gone component, not
-  // call setState with an empty patch. The refresh catch branch and the
-  // superseded branch each compute ownership first and bail out when there is
-  // nothing left to write.
+  // 仅仅失效还不够：卸载后完成的过期读取必须在为已消失组件安排状态更新
+  // 之前返回，而不是用一个空补丁调用 setState。刷新的 catch 分支与被取代
+  // 分支都先计算持有关系，再在没有内容可写时退出。
   const catchBranch = REFRESH_SRC.slice(REFRESH_SRC.indexOf('const released = releaseLoading'),
     REFRESH_SRC.indexOf('if (gen !== generation.current) {'))
   assert.match(catchBranch, /if \(!released && gen !== generation\.current\) return/,

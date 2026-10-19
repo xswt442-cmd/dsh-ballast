@@ -4,11 +4,9 @@ import { createServer, request } from 'node:http'
 import { once } from 'node:events'
 import apply from '../lib/index.js'
 
-// The CI boot-check runs against a `dsh web` with no provider route, so its
-// measurement always has 0 surface nodes and every per-row assertion there is
-// vacuous. That silence is how M1 shipped a fabricated delta column. These
-// tests put the real host half behind a real socket with real rows, so the
-// guard and the row contract are asserted against traffic instead of shapes.
+// CI 的启动检查针对没有 provider 路由的 `dsh web`，它的计量 surface 节点
+// 恒为 0，那里所有逐行断言都是空转。这些测试把真实宿主端放在真实 socket
+// 与真实行后面，所以守卫和行约定是对流量断言，不是对形状断言。
 
 const SURFACE = {
   logRevision: 4,
@@ -37,26 +35,24 @@ function fakeSession() {
   }
 }
 
-// A session whose log will not measure: one corrupt log must not hide the rest
-// of the host, which only the cross-session scan can get wrong.
+// 一个日志无法计量的会话：一个损坏日志不能掩盖宿主上的其余会话，而这一点
+// 只有跨会话扫描可能弄错。
 function brokenSession() {
   return { id: 'sess-broken', events: [{ seq: 0, type: 'user/message', time: 1, data: {} }], header: { cwd: '/tmp/broken' } }
 }
 
 /**
- * Mount the host half on a real loopback server.
- * @param nodes - what ctx.tokenMeter.measure reports for the live session.
- *   Pass pre-0.1.2-alpha.2 shaped nodes (no heuristicTokens) to probe the
- *   degraded host.
+ * 在真实 loopback 服务器上挂载宿主端。
+ * @param nodes - ctx.tokenMeter.measure 为活跃会话报告的内容。传入
+ *   pre-0.1.2-alpha.2 形状的节点（没有 heuristicTokens）来验证降级宿主。
  */
-async function mount(nodes, { connection, extra } = {}) {
+async function mount(nodes, { connection, extra, surface = SURFACE } = {}) {
   const session = fakeSession()
   const broken = brokenSession()
   const routes = new Map()
   const disposed = []
-  // The connection scope's own teardown: firing it is how a test reaches the
-  // state an RC1 service reload leaves behind, where `connection` is null again
-  // but the host has already had one.
+  // connection scope 自己的销毁：触发它，测试就能到达服务重载后的状态——
+  // `connection` 又是 null，但宿主已经有过一个。
   const scopeDisposed = []
   const ctx = {
     webServer: {
@@ -75,25 +71,28 @@ async function mount(nodes, { connection, extra } = {}) {
         tokenMeter: {
           measure(target) {
             if (target === broken) throw new Error('step event seq mismatch')
-            if (target !== session) throw new Error('measure on an unknown session')
-            return { ...SURFACE, nodes }
+            // 已存储会话的按需计量交来的是一个游离 Session，不是活跃会话对象。
+            // 它由 core/session 造出来，所以按形状识别：它报告自己的日志长度，
+            // 不是一个本夹具认识的活跃会话。
+            if (target !== session && !(typeof target.seq === 'number' && target.header)) {
+              throw new Error('measure on an unknown session')
+            }
+            return { ...surface, nodes }
           }
         },
         sessions: {
           list: () => [session, broken],
           get: (id) => (id === session.id ? session : id === broken.id ? broken : null)
         },
-        // The optional services, present only in the tests that need them: a
-        // host that mounts none of them is the state the live half must keep
-        // working in.
+        // 可选服务，只在需要它们的测试里出现：一个都没挂载的宿主，是活跃
+        // 部分必须继续工作的状态。
         ...extra
       })
     },
     on(event, fn) {
       if (event === 'dispose') disposed.push(fn)
     },
-    // cordis disposal idiom: the effect callback returns the cleanup (the
-    // host half registers its teardown this way).
+    // cordis 的销毁写法：effect 回调返回清理函数（宿主端这样注册清理）。
     effect(fn) {
       const cleanup = fn()
       const list = Array.isArray(cleanup) ? cleanup : [cleanup]
@@ -115,16 +114,14 @@ async function mount(nodes, { connection, extra } = {}) {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const port = server.address().port
-  // Mirror DSH's webServer port so Origin validation exercises the real port.
+  // 与 DSH 的 webServer 端口保持一致，让 Origin 校验走真实端口。
   ctx.webServer.port = port
   return {
     port,
     url: (query = '') => `http://127.0.0.1:${port}/dsh-ballast/api${query}`,
-    // The route object itself, for the one case a real socket cannot stage: a
-    // peer that is not on this machine.
+    // 路由对象本身，用于真实 socket 无法构造的一个场景：peer 不在这台机器上。
     route: () => routes.get('/dsh-ballast/api'),
-    // Simulate the service going away the way a reload does, leaving the
-    // "this host has had a Connection" latch set.
+    // 模拟服务像重载一样消失，留下“这个宿主曾经有过 Connection”的闩锁。
     unloadConnection: async () => {
       for (const fn of scopeDisposed) await fn()
     },
@@ -153,8 +150,8 @@ test('a Connection that cannot answer is treated as unavailable, not as permissi
   })
   t.after(() => host.dispose())
 
-  // A throwing connection service leaves the request unauthorized: the gate
-  // answers 503 itself, and the route handler is never reached.
+  // 一个抛出异常的 connection 服务让请求保持未授权：闸门自己回答 503，
+  // 路由处理函数永远不会被到达。
   const res = await send(host.url('?action=sessions'))
   assert.equal(res.status, 503)
   assert.equal(res.body.code, 'connection_unavailable')
@@ -184,11 +181,9 @@ test('a Connection rejection that is not 401 reads as forbidden', async (t) => {
   assert.equal(res.body.code, 'forbidden')
 })
 
-// The reload gap is the case a weaker fence must never fill. Once this host has
-// had an RC1 Connection, the Connection is the boundary, so a request arriving
-// while the service is unloaded is answered 503 — falling through to the loopback
-// guard would serve sessions to a browser whose authentication is exactly what the
-// reload dropped.
+// 重载间隙是更弱的围栏绝不能填补的场景。宿主一旦有过 RC1 Connection，
+// Connection 就是边界，所以服务卸载期间到达的请求回答 503——落到 loopback
+// 守卫会向一个浏览器提供会话，而该浏览器的认证正是重载丢掉的东西。
 test('a Connection reload gap answers 503 and never reaches the loopback guard', async (t) => {
   const host = await mount(SURFACE.nodes, {
     connection: { requestRejection: () => undefined }
@@ -198,8 +193,8 @@ test('a Connection reload gap answers 503 and never reaches the loopback guard',
   assert.equal((await send(host.url('?action=sessions'))).status, 200)
 
   await host.unloadConnection()
-  // The Origin below is one the guard rejects with 403. Reading 503 instead is the
-  // proof the guard was never consulted, not merely that the route stayed shut.
+  // 下面的 Origin 是守卫会以 403 拒绝的一个。读到 503 证明守卫从未被查询，
+  // 而不只是路由仍然关闭。
   const gap = await send(host.url('?action=sessions'), { origin: 'https://evil.example' })
   assert.equal(gap.status, 503)
   assert.equal(gap.body.code, 'connection_unavailable')
@@ -208,9 +203,8 @@ test('a Connection reload gap answers 503 and never reaches the loopback guard',
   }
 })
 
-// The route's outer fence is the last thing between a host-side throw and the
-// browser. It answers a code, and the message it cannot classify goes to the log
-// only: an exception text can name a path, a service field or an upstream status.
+// 路由的外层围栏是宿主抛出与浏览器之间的最后一道。它回答一个固定 code，
+// 无法归类的消息只进日志：异常文本可能带出路径、服务字段或上游状态码。
 test('an unexpected failure answers a fixed code and logs the message', async (t) => {
   const host = await mount(SURFACE.nodes)
   t.after(() => host.dispose())
@@ -226,8 +220,8 @@ test('an unexpected failure answers a fixed code and logs the message', async (t
   const originalError = console.error
   console.error = (...args) => logged.push(args.join(' '))
   try {
-    // A request line the URL parser cannot read, past the guard and the method
-    // gate — the reply carries a fixed `code`, never the parser's message.
+    // 在守卫与方法闸门之后，给 URL 解析器一个无法读取的请求行——响应只携带
+    // 固定 `code`，绝不带解析器的消息。
     await host.route().handler({
       method: 'GET',
       url: 'http://[',
@@ -247,7 +241,7 @@ test('an unexpected failure answers a fixed code and logs the message', async (t
   assert.ok(logged.some((line) => /invalid url|TypeError/i.test(line)), 'the message never reached the log')
 })
 
-/** Raw request so Host can be overridden — fetch() would normalise it away. */
+/** 原始请求，便于覆盖 Host——fetch() 会把它规范化掉。 */
 function send(url, headers = {}, method = 'GET') {
   return new Promise((resolve, reject) => {
     const target = new URL(url)
@@ -283,8 +277,8 @@ test('the guard rejects cross-site, foreign origin and rebound host, admits loop
 
   const open = await send(host.url('?action=sessions'))
   assert.equal(open.status, 200)
-  // The reply policy comes from the embedded `dsh-host-http` fragment: a body
-  // naming ports, pids and session ids must never be servable from a cache.
+  // 响应策略来自嵌入的 `dsh-host-http` 片段：带端口、pid 与会话 id 的响应体
+  // 绝不能从缓存提供。
   assert.equal(open.headers['cache-control'], 'no-store')
   assert.match(open.headers['content-type'], /^application\/json; charset=utf-8$/)
   assert.equal(open.body.availability, 'available')
@@ -297,10 +291,9 @@ test('the mounted route rejects a remote peer, however local its headers look', 
   const host = await mount(SURFACE.nodes)
   t.after(() => host.dispose())
 
-  // DSH's webserver supports listening on 0.0.0.0, and a remote client writes
-  // its own Host header, so the loopback Host check alone left sessions,
-  // measure and top readable off-machine. A real loopback socket cannot stage
-  // that peer; the route is driven directly instead.
+  // DSH 的 webserver 支持监听 0.0.0.0，而远程客户端会写自己的 Host 头，所以
+  // 只检查 loopback Host 会让 sessions、measure 与 top 在机器外可读。真实
+  // loopback socket 无法构造这种 peer；这里直接驱动路由。
   for (const action of ['sessions', 'measure&sessionId=sess-http-1', 'top']) {
     const chunks = []
     let status = null
@@ -318,7 +311,7 @@ test('the mounted route rejects a remote peer, however local its headers look', 
     assert.equal(status, 403, `action=${action} must not answer a remote peer`)
     const body = JSON.parse(chunks.join(''))
     assert.equal(body.code, 'non_loopback_peer')
-    // The rejection must not leak the data it refused to serve.
+    // 拒绝不能泄露它拒绝提供的数据。
     for (const field of ['sessions', 'measurement', 'availability', 'pid']) {
       assert.ok(!(field in body), `the rejection leaks ${field}`)
     }
@@ -337,8 +330,7 @@ test('the route is read-only in its method shape, not just its handlers', async 
     assert.equal(res.body.code, 'method')
     assert.equal(res.headers.allow, 'GET, HEAD')
   }
-  // The guard runs before the method gate: a cross-site request must not get
-  // far enough to learn which verbs the route accepts.
+  // 守卫在方法闸门之前运行：跨站请求不能走到得知路由接受哪些动词的一步。
   assert.equal((await send(host.url('?action=sessions'), { 'sec-fetch-site': 'cross-site' }, 'POST')).status, 403)
 })
 
@@ -375,8 +367,8 @@ test('a priced surface yields heaviest-first rows with a real delta per row', as
 })
 
 test('a host without the shadow price answers nulls over HTTP, never delta === tokens', async (t) => {
-  // Exactly what rc.2 sends: nodes carry `tokens` only, and the absent shadow
-  // price stays null, so no row reads as route-priced with delta === tokens.
+  // 正是 rc.2 发送的内容：节点只带 `tokens`，缺席的影子价保持 null，所以
+  // 没有行被读成路由定价且 delta === tokens。
   const host = await mount(SURFACE.nodes.map(({ seq, tokens }) => ({ seq, tokens })))
   t.after(() => host.dispose())
 
@@ -393,8 +385,8 @@ test('a host without the shadow price answers nulls over HTTP, never delta === t
 })
 
 test('a node whose price cannot be read is absence, not a measured zero', async (t) => {
-  // A node with no readable price is absence: `tokens` stays null and is kept
-  // out of the totals, the sort and the bar widths, where a 0 would be a price.
+  // 没有可读价格的节点是缺席：`tokens` 保持 null，并被排除在合计、排序与
+  // 条宽之外；0 在那里会是一个价格。
   const host = await mount([
     { seq: 0, tokens: 15, heuristicTokens: 15 },
     { seq: 1, heuristicTokens: 55 },
@@ -408,7 +400,7 @@ test('a node whose price cannot be read is absence, not a measured zero', async 
   assert.equal(unreadable.tokens, null)
   assert.equal(unreadable.priceDelta, null)
   assert.equal(unreadable.routePriced, null)
-  // The shadow price the host did send is still reported; absence is per field.
+  // 宿主确实发送的影子价仍然报告；缺席是按字段的。
   assert.equal(unreadable.heuristicTokens, 55)
   assert.equal(m.unpricedCount, 1)
   assert.equal(m.byType.total, 415)
@@ -434,8 +426,7 @@ test('action=top ranks live sessions by their heaviest node', async (t) => {
   assert.equal(res.status, 200)
   assert.equal(res.body.ok, true)
   assert.equal(res.body.limit, 5)
-  // The corrupt session is reported as a failure, not silently dropped or
-  // allowed to take the whole answer down.
+  // 损坏会话被报告为一次失败，既不静默丢弃，也不让它拖垮整个答案。
   assert.equal(res.body.failedCount, 1)
   assert.equal(res.body.failures[0].sessionId, 'sess-broken')
   assert.equal(res.body.sessions.length, 1)
@@ -465,17 +456,15 @@ test('action=top is read-only in its method shape too', async (t) => {
 })
 
 test('action=cold lists stored sessions the live half cannot see', async (t) => {
-  // A session with no live Agent has no Session object, so none of the live
-  // reads apply: the persistence snapshot is the only row source, and the
-  // projection cache the only token figure. The live session is absent from the
-  // list because the panel already shows it — reporting one conversation twice
-  // is worse than reporting it once.
+  // 没有活跃 Agent 的会话没有 Session 对象，所以活跃读取都不适用：持久化
+  // 快照是唯一的行来源，投影缓存是唯一的 token 数字。活跃会话不在列表里，
+  // 因为面板已经显示它——把一段对话报告两次比报告一次更糟。
   const stored = [
     { header: { id: 'sess-http-1', cwd: '/live' }, revision: 9, eventCount: 3, sizeBytes: 100 },
     { header: { id: 'old-big', cwd: '/work/big' }, revision: 5, eventCount: 90, sizeBytes: 4_000_000 },
     { header: { id: 'old-small', cwd: '/work/small' }, revision: 2, eventCount: 10, sizeBytes: 2048 },
-    // A backend that cannot price a log or its length cheaply omits the fields.
-    // The row then carries no figure, which is not the same answer as zero.
+    // 无法低成本统计日志或其长度的后端会省略字段。这一行因此不带数字，
+    // 这与零是不同的答案。
     { header: { id: 'old-unpriced', cwd: '/work/other' }, revision: 1 }
   ]
   const host = await mount(SURFACE.nodes, {
@@ -508,8 +497,8 @@ test('action=cold lists stored sessions the live half cannot see', async (t) => 
   assert.equal(big.sizeBytes, 4_000_000)
   assert.equal(big.eventCount, 90)
   assert.deepEqual(big.projections.contextPressure, { pressureTokens: 400, contextWindow: 128000 })
-  // The cache folds the token figures, so a stored row is priced without its log
-  // being read; the denominator it lacks stays absent rather than being inferred.
+  // 缓存折算 token 数字，所以已存储行不读日志也能定价；它缺少的分母保持
+  // 缺席，不被推断。
   assert.deepEqual(small.projections.contextPressure, { pressureTokens: 200 })
   assert.equal(unpriced.sizeBytes, null)
   assert.equal(unpriced.eventCount, null)
@@ -544,4 +533,128 @@ test('action=cold is read-only in its method shape too', async (t) => {
   t.after(() => host.dispose())
 
   assert.equal((await send(host.url('?action=cold'), {}, 'POST')).status, 405)
+})
+
+// ---- action=cold-measure -------------------------------------------------
+// 已存储会话的真实计量。这一节跑的是宿主端真实的那条路径：路由自己按需动态
+// 载入 `@deepseek-ai/dsh-session`，所以这些用例也证明那次 import 在宿主进程
+// 的位置解析得到——它解析不到时回答 503，而不是让整条路由失败。
+
+// 一份通过 core/session 校验的已存储日志。
+const STORED_LOG = [
+  { seq: 0, type: 'step/start', time: 1767225600000, data: { turn: 1, step: 1 } },
+  {
+    seq: 1, type: 'user/message', time: 1767225600100, surfaceOp: 'append',
+    data: { id: 'm1', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '看一下窗口占用' }] }
+  }
+]
+
+const storedHeader = (id) => ({
+  version: 4, id, createdAt: 1767225600000, cwd: '/work/stored', parentSession: '', isSeeded: false
+})
+
+/** 一个存储宿主：查询服务按 id 回答真实的日志。 */
+function storedMeasureHost(readSession) {
+  return {
+    sessionPersistence: { list: async () => [{ header: storedHeader('old-1'), sizeBytes: 2048, eventCount: 2, revision: 2 }] },
+    sessionQuery: {
+      readSession: readSession || (async (id) => ({
+        session: storedHeader(id), inheritedEventCount: 0, events: STORED_LOG
+      })),
+      readTitleSnapshots: async () => []
+    }
+  }
+}
+
+test('action=cold-measure prices a stored session from its complete log', async (t) => {
+  // 已存储日志有自己的 surface：节点按这份日志的 seq 索引，所以夹具里那三条
+  // 活跃会话的节点对它不适用。
+  const storedSurface = {
+    logRevision: 3,
+    baseline: { kind: 'estimated', tokens: 40 },
+    surfaceDeltaTokens: 0,
+    totalTokens: 40,
+    surfaceTokens: 40,
+    nodes: [{ seq: 1, tokens: 40, heuristicTokens: 40 }]
+  }
+  const host = await mount(storedSurface.nodes, {
+    extra: storedMeasureHost(),
+    surface: storedSurface
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold-measure&sessionIds=old-1'))
+  assert.equal(res.status, 200)
+  assert.equal(res.body.ok, true)
+  assert.equal(res.body.failedCount, 0)
+  const [entry] = res.body.sessions
+  assert.equal(entry.sessionId, 'old-1')
+  // 逐条归因来自完整日志：user/message 那一行带着它自己的摘要。
+  assert.equal(entry.measurement.rows[0].type, 'user/message')
+  assert.equal(entry.measurement.rows[0].preview.text, '看一下窗口占用')
+})
+
+test('action=cold-measure reports a corrupt log as one failed row', async (t) => {
+  // seq 不连续的日志不能重放。那是这一行自己的事，整个请求仍然成功。
+  const broken = [{ seq: 9, type: 'user/message', time: 1, surfaceOp: 'append',
+    data: { id: 'm', role: 'user', source: { kind: 'user' }, content: [] } }]
+  const host = await mount(SURFACE.nodes, {
+    extra: storedMeasureHost(async (id) => ({ session: storedHeader(id), inheritedEventCount: 0, events: broken }))
+  })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold-measure&sessionIds=old-1'))
+  assert.equal(res.status, 200)
+  assert.equal(res.body.ok, true)
+  assert.deepEqual(res.body.sessions, [])
+  assert.equal(res.body.failedCount, 1)
+  assert.match(res.body.failures[0].error, /seq/)
+})
+
+test('action=cold-measure requires session ids', async (t) => {
+  const host = await mount(SURFACE.nodes, { extra: storedMeasureHost() })
+  t.after(() => host.dispose())
+
+  // 缺参数与「什么都不测」是两个不同的请求，所以前者是 400。
+  for (const query of ['?action=cold-measure', '?action=cold-measure&sessionIds=', '?action=cold-measure&sessionIds=,,']) {
+    const res = await send(host.url(query))
+    assert.equal(res.status, 400, query)
+    assert.equal(res.body.code, 'session_required')
+  }
+})
+
+test('action=cold-measure bounds how many logs one request may read', async (t) => {
+  const read = []
+  const host = await mount(SURFACE.nodes, {
+    extra: storedMeasureHost(async (id) => {
+      read.push(id)
+      return { session: storedHeader(id), inheritedEventCount: 0, events: STORED_LOG }
+    })
+  })
+  t.after(() => host.dispose())
+
+  const many = Array.from({ length: 40 }, (_, i) => `s${i}`).join(',')
+  const res = await send(host.url(`?action=cold-measure&sessionIds=${many}`))
+  assert.equal(res.status, 200)
+  // 每个 id 都要把一份完整日志读进内存，所以上限与 top 的 limit 同样在这里。
+  assert.ok(read.length <= 20, `a single request read ${read.length} logs`)
+  assert.equal(read.length, 20)
+})
+
+test('action=cold-measure answers unavailable on a host without the query service', async (t) => {
+  // 跨版本没有查询服务时该行不出现计量入口。503 让界面撤掉入口，而不是显示
+  // 一个可以反复点的失败按钮。
+  const host = await mount(SURFACE.nodes, { extra: { sessionPersistence: { list: async () => [] } } })
+  t.after(() => host.dispose())
+
+  const res = await send(host.url('?action=cold-measure&sessionIds=old-1'))
+  assert.equal(res.status, 503)
+  assert.equal(res.body.code, 'unavailable')
+})
+
+test('action=cold-measure is read-only in its method shape too', async (t) => {
+  const host = await mount(SURFACE.nodes, { extra: storedMeasureHost() })
+  t.after(() => host.dispose())
+
+  assert.equal((await send(host.url('?action=cold-measure&sessionIds=old-1'), {}, 'POST')).status, 405)
 })

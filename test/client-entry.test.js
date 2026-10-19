@@ -1,8 +1,7 @@
-// The browser half's registration surface, exercised for real: `lib/client.js` is
-// evaluated the way the host's classic <script> evaluates it, and what the plugin
-// handed the shell is read back off the shell. A grep over the source passes when
-// an identifier appears only in a comment; these pass only when the bundle boots,
-// registers its seats, and reads from the route it owns.
+// 浏览器端的注册面，按真实方式验证：`lib/client.js` 按宿主经典 <script>
+// 的方式求值，插件交给 shell 的东西再从 shell 读回来。对源码做文本匹配时，
+// 标识符只出现在注释里也会通过；这里的断言只有在 bundle 启动、注册席位并
+// 读取自己的路由时才成立。
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -13,8 +12,8 @@ import {
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
-// A host that answers all three read shapes, so a test can drive the panel into
-// every view it has and watch what it asks for.
+// 一个对三种读取形状都作答的宿主，测试因此能把面板驱动到每个视图，并观察
+// 它请求了什么。
 function server() {
   return (url) => {
     if (url.includes('action=measure')) {
@@ -41,7 +40,7 @@ function server() {
     }
     return {
       ok: true,
-      // The identity of the process that answered, as the route reports it.
+      // 作答进程的身份，由路由报告。
       pid: 4242,
       port: 19387,
       availability: 'available',
@@ -57,10 +56,9 @@ test('the bundle registers under the package name', () => {
 })
 
 test('the artifact is a classic script: it boots where Node globals do not exist', () => {
-  // The sandbox has no `require`, `module`, `exports`, `process` and no ESM
-  // loader, so this is the shape the browser gives the bundle. An `import` line is
-  // a SyntaxError here and a Node builtin reaches an undefined name — either one
-  // fails this test rather than passing a regex over the text.
+  // 沙箱里没有 `require`、`module`、`exports`、`process` 和 ESM 加载器，
+  // 这就是浏览器给 bundle 的形状。`import` 在这里是语法错误，Node 内置模块
+  // 会落到未定义的名字——两者都会让这个测试失败，而不是让文本匹配通过。
   const { sandbox, definition } = bootClient()
   for (const name of ['require', 'module', 'exports', 'process', '__dirname']) {
     assert.equal(sandbox[name], undefined, `the sandbox leaked ${name} into the client runtime`)
@@ -70,18 +68,17 @@ test('the artifact is a classic script: it boots where Node globals do not exist
 
 test('the client joins the launcher menu instead of a page-local dock', () => {
   const { entry, registered, window } = bootClient()
-  // One row on the launcher menu seat, contributed by this plugin...
+  // 启动器菜单上的一行，由本插件贡献……
   const row = entry(UTILITY_ITEM_SLOT, 'ballast')
   assert.ok(row, 'the client contributes no row to the launcher menu seat')
   assert.equal(typeof row.render, 'function')
-  // ...and the launcher itself, claimed on the shell's overlay layer.
+  // ……以及启动器本身，认领在 shell 的 overlay 层上。
   assert.ok(entry(OVERLAY_SLOT, 'utility-launcher'), 'the client never claimed the launcher')
   assert.ok(entry(OVERLAY_SLOT, 'ballast-panel'), 'the panel is not on the overlay layer')
   assert.ok(entry(HOVER_SLOT, 'ballast'), 'the session row seat is gone')
 
-  // The claim is the launcher's page mutex: owning it is what makes one copy of
-  // the assembly run per page. The retired page-local dock protocol must not be
-  // what created it.
+  // 认领就是启动器的页面互斥：持有它才保证每页只运行一份装配。页面里没有
+  // 第二个 dock 键参与协调。
   const claim = window.__CREATEHELPER_DSH_UTILITY_LAUNCHER_V1__
   assert.ok(claim && typeof claim === 'object', 'the launcher claim was never taken')
   assert.equal(claim.owner !== null, true, 'the launcher claim is empty after this plugin registered it')
@@ -95,7 +92,7 @@ test('every read the panel makes goes to this plugin\'s own same-origin route', 
   const client = bootClient({ server: server() })
   const panel = () => client.renderSeat(OVERLAY_SLOT, 'ballast-panel')
 
-  // Open it the way a user does: the launcher menu row this plugin contributed.
+  // 按用户的方式打开面板：本插件贡献的启动器菜单行。
   const menu = client.renderSeat(OVERLAY_SLOT, 'utility-launcher', { renderSlot: client.renderSlot })
   const [row] = allNodes(menu, (node) => node.type === 'button' && node.props['aria-pressed'] !== undefined)
   assert.ok(row, 'the launcher menu renders no row for this plugin')
@@ -105,9 +102,8 @@ test('every read the panel makes goes to this plugin\'s own same-origin route', 
   await settle()
   assert.ok(client.fetched.length > 0, 'an opened panel read nothing')
 
-  // The cross-session view is the third route shape; without this click the
-  // `top` request would never leave the panel and never be checked. Among the
-  // panel's own buttons only the view toggle reports a pressed state.
+  // 跨会话视图是第三种路由形状；没有这次点击，`top` 请求永远不会离开面板，
+  // 也就不会被检查。面板自己的按钮里只有视图开关报告按下状态。
   const [hostView] = allNodes(panel(), (node) => node.type === 'button' && node.props['aria-pressed'] !== undefined)
   assert.ok(hostView, 'the panel renders no control to switch view')
   hostView.props.onClick()
@@ -120,10 +116,9 @@ test('every read the panel makes goes to this plugin\'s own same-origin route', 
   assert.ok(client.fetched.some((url) => url.includes('action=top')), 'the panel never ran the cross-session scan')
 })
 
-// The identity of the answering process is part of the snapshot, not decoration:
-// two DSH hosts can serve one data directory, and a panel lists only the sessions
-// alive in the process that replied. A header that shows a bare count invites the
-// reader to add up the other host's sessions.
+// 作答进程的身份是快照的一部分，不是装饰：两个 DSH 宿主可以服务同一个数据
+// 目录，而面板只列出作答进程里活着的会话。头部只显示一个数字，会诱导读者
+// 把另一个宿主的会话加进来。
 test('the panel header names the host process that answered', async () => {
   const client = bootClient({ server: server() })
   const panel = () => client.renderSeat(OVERLAY_SLOT, 'ballast-panel')
@@ -137,7 +132,7 @@ test('the panel header names the host process that answered', async () => {
   assert.ok(identity, 'the panel header does not name the host process')
   assert.equal(textOf(identity), 'pid 4242 · port 19387')
 
-  // The count the cross-session view shows is that same process's live sessions.
+  // 跨会话视图显示的计数来自同一个进程的活跃会话。
   const [hostView] = allNodes(panel(), (node) => node.type === 'button' && node.props['aria-pressed'] !== undefined)
   hostView.props.onClick()
   await settle()

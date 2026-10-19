@@ -30,11 +30,8 @@ commit into `main`. Only release-ready changes belong on `main`.
    ```
 
    A block the pin does not carry is neither written by `sync` nor compared by
-   `check`, so a green `npm test` says nothing about it and a fragment newer than
-   the pin can ship unverified. Sync such a block from a dock checkout that
-   already has the fragment, then raise the pin and re-sync every block in one
-   commit: two pushes — old bytes under a new pin, or the reverse — leave CI
-   reporting ok about a file it never actually verified.
+   `check`: sync it from a dock checkout that already has the fragment, then raise
+   the pin and re-sync every block in one commit (see `AGENTS.md`).
 
 3. Run:
 
@@ -81,9 +78,26 @@ commit into `main`. Only release-ready changes belong on `main`.
   only job with `contents: write`, and the only one that runs no repository
   code.
 
-The badge row of both READMEs leads with the `ci` badge, which reports the
-`compat` workflow on `main`. That is the pipeline a green release assumes; the
-`docs` workflow and this publish run carry no badge.
+The `ci` badge in both READMEs reports the `compat` workflow on `main`. The
+`docs` workflow and the publish run carry no badge, so a green badge alone does
+not mean the release checks ran.
 
-Published npm versions are immutable. Deprecate a bad version and publish a new
-patch instead of moving a tag.
+## Rolling back
+
+Tags, releases and published npm versions stay immutable: do not unpublish a
+version, move a tag, or replace release assets.
+
+1. Mark the bad version deprecated so installers see the reason:
+
+   ```sh
+   npm deprecate dsh-ballast@X.Y.Z "reason"
+   ```
+
+2. Fix on `dev` and release the patch that replaces it by following this
+   checklist.
+3. Leave the GitHub release for the bad version in place; its notes describe
+   what that version actually did.
+
+If the publish workflow failed before the release job ran, re-run it on the same
+tag: the release step refreshes an existing release instead of failing on the
+name.
