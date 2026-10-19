@@ -4,8 +4,8 @@ import { buildToolNameMap, extractPreview, surfaceOpKind, PREVIEW_MAX_CHARS } fr
 
 const text = (t) => ({ type: 'text', text: t })
 
-// Payload shapes per core/session/src/types.ts:244,257,275 — user/message data
-// IS the message; the other two wrap one level in .message.
+// 载荷形状：user/message 的 data 就是消息本身；其余两种在 .message 里
+// 再包一层。
 const userEvent = (content, source = { kind: 'user' }) => ({
   type: 'user/message', seq: 0, time: 1000, surfaceOp: 'append', data: { id: 'm1', role: 'user', content, source }
 })
@@ -134,7 +134,7 @@ test('long previews clip on a code-point boundary and report the full length', (
   assert.equal(preview.truncated, true)
   assert.equal(Array.from(preview.text).length, PREVIEW_MAX_CHARS)
 
-  // 219 ASCII + emoji puts the naive unit-level cut between a surrogate pair.
+  // 219 个 ASCII 字符加 emoji 会让按码元切割的朴素实现切在代理对中间。
   const astral = 'a'.repeat(PREVIEW_MAX_CHARS - 1) + '🧱'.repeat(10)
   const clipped = extractPreview(userEvent([{ type: 'text', text: astral }]), new Map())
   assert.ok(!/[\uD800-\uDBFF]$/.test(clipped.text), 'a dangling high surrogate means the clip split a pair')

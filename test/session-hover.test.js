@@ -1,10 +1,8 @@
-// The Sidebar Session-row hover seat. Unlike the panel, this component renders
-// while the pointer is over a row, so its contract is not only what it shows
-// but what it refuses to do: it answers from facts an earlier read already
-// cached, and it never starts a host request of its own. This file boots the
-// real client bundle in a vm over a real DOM and the real React packages,
-// renders the seat, and drives the panel once so the cache holds something the
-// host really answered.
+// Sidebar Session 行的悬停席位。与面板不同，这个组件在指针悬停到行上时
+// 渲染，所以它的约定不只是显示什么，还包括拒绝做什么：它从先前读取已缓存的
+// 事实作答，绝不自己发起宿主请求。本文件在 vm 中用真实 DOM 与真实 React 包
+// 启动客户端 bundle，渲染席位，并驱动面板一次，让缓存里持有宿主真实返回的
+// 内容。
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -12,7 +10,7 @@ import {
   HOVER_SLOT, OVERLAY_SLOT, UTILITY_ITEM_SLOT, allNodes, bootClient, buttonsIn, settle, textOf
 } from './support/client-runtime.js'
 
-// A host that answers the plugin's read shapes with fixed facts.
+// 一个用固定事实回答插件读取形状的宿主。
 function hostServer() {
   return (url) => {
     if (url.includes('action=sessions')) {
@@ -50,15 +48,14 @@ function hostServer() {
   }
 }
 
-// The hover seat registers its component directly, so a test renders it the
-// way the framework would: as an element, never by calling it bare.
+// 悬停席位直接注册组件，测试按框架的方式渲染它：作为元素，绝不裸调用。
 const boot = (server) => {
   const client = bootClient({ server })
   const seat = (props) => client.renderSeat(HOVER_SLOT, 'ballast', props)
   return { ...client, seat }
 }
 
-// --- seat registration ----------------------------------------------------
+// --- 席位注册 ------------------------------------------------------------
 
 test('the seat registers on the Sidebar Session row hover card with this plugin id', () => {
   const { registered, entry } = boot(() => ({ ok: false }))
@@ -68,7 +65,7 @@ test('the seat registers on the Sidebar Session row hover card with this plugin 
   assert.ok(hover.options.order > 0 && hover.options.order < 100,
     'the seat keeps a small order so it stays inside the hover card')
   assert.notEqual(hover.options.order, 10, 'the shipped schedule section owns order 10')
-  // The registrations that already existed are untouched.
+  // 已有的注册没有被改动。
   assert.ok(entry(UTILITY_ITEM_SLOT, 'ballast'), 'the launcher menu row is gone')
   assert.ok(entry(OVERLAY_SLOT, 'ballast-panel'), 'the panel is gone')
   assert.ok(entry(OVERLAY_SLOT, 'utility-launcher'), 'the launcher claim is gone')
@@ -76,7 +73,7 @@ test('the seat registers on the Sidebar Session row hover card with this plugin 
     'this plugin contributes exactly one row to the seat')
 })
 
-// --- no cached fact: the action and no number -----------------------------
+// --- 没有缓存事实：动作与零数字 ------------------------------------------
 
 test('an uncached row offers the action and fabricates no number', () => {
   const { fetched, seat } = boot(() => ({ ok: false }))
@@ -92,17 +89,17 @@ test('an uncached row offers the action and fabricates no number', () => {
     'with nothing cached there is no summary element')
   assert.deepEqual(fetched, [], 'rendering the seat must not call the host')
 
-  // The seat needs a Session identity; without one it renders nothing rather
-  // than a row whose action could not work.
+  // 席位需要 Session 身份；没有身份时渲染空，而不是渲染一个动作无法执行的
+  // 行。
   assert.equal(seat({}), null)
 })
 
-// --- cached fact + the action focuses the panel ---------------------------
+// --- 有缓存事实：动作让面板定位到该会话 ----------------------------------
 
 test('the row repeats a cached measurement, and its action focuses the panel on that session', async () => {
   const { fetched, renderNode, entry, seat } = boot(hostServer())
 
-  // Open the panel the way a user does, so its own read fills the cache.
+  // 像用户一样打开面板，让它自己的读取填充缓存。
   const menuTree = renderNode(entry(UTILITY_ITEM_SLOT, 'ballast').render({}))
   buttonsIn(menuTree)[0].props.onClick()
   const panel = entry(OVERLAY_SLOT, 'ballast-panel')
@@ -113,21 +110,21 @@ test('the row repeats a cached measurement, and its action focuses the panel on 
 
   const readsAfterPanel = fetched.length
 
-  // The measured session shows its numbers, read from the cache.
+  // 已计量的会话显示数字，来自缓存。
   const measured = seat({ sessionId: 'session-a' })
   assert.match(textOf(measured), /surface 1,234 · heaviest #7 900/)
   assert.match(textOf(measured), /Show breakdown/)
 
-  // A listed but unmeasured session has no token figure, so it shows none —
-  // only the log length the list really carried.
+  // 只被列出、尚未计量的会话没有 token 数字，所以不显示——只有列表真正
+  // 携带的日志长度。
   const listed = seat({ sessionId: 'session-b' })
   assert.equal(textOf(listed), 'log 3 eventsShow breakdown')
   assert.doesNotMatch(textOf(listed), /surface|heaviest/, 'an unmeasured session gets no token figure')
 
   assert.equal(fetched.length, readsAfterPanel, 'rendering cached rows must not call the host')
 
-  // The action targets session-b, which is not the session the open panel had
-  // selected: only a real focus path can produce that measure request.
+  // 动作以 session-b 为目标，而它不是已打开面板选中的会话：只有真实的定位
+  // 路径才能产生那个 measure 请求。
   allNodes(listed, (node) => node.type === 'button')[0].props.onClick()
   renderNode(panel.render())
   await settle()
@@ -135,8 +132,7 @@ test('the row repeats a cached measurement, and its action focuses the panel on 
   assert.equal(measures[measures.length - 1], '/dsh-ballast/api?action=measure&sessionId=session-b',
     'the action must open the panel focused on the row sessionId')
 
-  // The measured row's own action moves the panel back: the entry point works
-  // whether or not the row has a cached fact to show beside it.
+  // 已计量行自己的动作把面板移回去：无论该行有没有缓存事实，入口都能用。
   allNodes(measured, (node) => node.type === 'button')[0].props.onClick()
   renderNode(panel.render())
   await settle()
