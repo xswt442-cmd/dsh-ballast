@@ -3,6 +3,13 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## Unreleased
+
+### Added
+
+- Every row of the current session carries a locate button; clicking it scrolls the chat to that entry and highlights it. The button appears only while the chat is showing the session being measured.
+- Locating reads internal chat DOM attributes rather than a public interface. When the host stops providing them the button is absent, and a click can only reach the first entry of the same turn; the rest of the panel is unaffected.
+
 ## 0.4.1 - 2026-10-19
 
 ### Maintenance

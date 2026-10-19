@@ -16,6 +16,8 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 ## Features
 
 - List user messages, assistant messages, and tool results by token occupancy. Text is whitespace-collapsed and truncated, tool results show their tool name, and reasoning blocks and images are counted but not inlined.
+- Every row of the current session carries a locate button: clicking it scrolls the chat to that entry and highlights it. The button appears only while the chat is showing the session being measured.
+- Locating works through internal DOM attributes of the chat, which are not a public interface. When the host drops those attributes the button is absent, or clicking it does nothing; the entries are still listed.
 - Show the current route price and, when the host also supplies a heuristic shadow price, mark the difference. A difference indicates that an image may have been repriced as visual tokens; it is not an anomaly or an importance score.
 - Show token share aggregated by message type and the heaviest entry in each live session on the current host.
 - Show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and the provider-usage anchor use different accounting bases, and the panel does not add them together.
