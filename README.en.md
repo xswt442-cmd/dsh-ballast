@@ -71,6 +71,8 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 | DSH | `>=0.1.5-rc.3` |
 | Node.js | `>=20` |
 
+DSH Desktop is an Electron shell around the same web application; it shares the `webServer`, the client seats, and the launcher, and its data directory is the same `DSH_HOME`. This plugin behaves on Desktop as it does on `dsh web`. The compatibility matrix pins `0.1.5-rc.3`, `0.1.7-rc.2`, `0.2.0-rc.1`, and `0.2.1-rc.2`; each version boots a real host once on Windows and once on Linux.
+
 RC1's `seq`, `inheritedEventCount`, and `events` are all supported: with `ctx.sessionQuery` present, event content is read by seq, and without it the older `.events` array is used. A missing projection hides the provider-usage and estimated-mix block; per-message token metering is still provided. A `contextPressure` without a `contextWindow` stays empty rather than being inferred from elsewhere.
 
 ## Development

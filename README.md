@@ -71,6 +71,8 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 | DSH | `>=0.1.5-rc.3` |
 | Node.js | `>=20` |
 
+DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.1.5-rc.3`、`0.1.7-rc.2`、`0.2.0-rc.1` 与 `0.2.1-rc.2`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
+
 RC1 的 `seq`、`inheritedEventCount`、`events` 均受支持：有 `ctx.sessionQuery` 时按 seq 取事件内容，没有时用旧的 `.events` 数组。projection 缺失时不显示 provider usage 与构成估算，逐条 token 计量仍然提供。`contextPressure` 缺少 `contextWindow` 时留空，不从别处推断。
 
 ## 开发
