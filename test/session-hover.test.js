@@ -65,7 +65,7 @@ test('the seat registers on the Sidebar Session row hover card with this plugin 
   assert.ok(hover.options.order > 0 && hover.options.order < 100,
     'the seat keeps a small order so it stays inside the hover card')
   assert.notEqual(hover.options.order, 10, 'the shipped schedule section owns order 10')
-  // 已有的注册没有被改动。
+  // 其余三个席位同时在场。
   assert.ok(entry(UTILITY_ITEM_SLOT, 'ballast'), 'the launcher menu row is gone')
   assert.ok(entry(OVERLAY_SLOT, 'ballast-panel'), 'the panel is gone')
   assert.ok(entry(OVERLAY_SLOT, 'utility-launcher'), 'the launcher claim is gone')

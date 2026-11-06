@@ -186,7 +186,7 @@ test('a rejected measure request puts the failure on screen', async () => {
   assert.equal(measureButtons(tree).length, 2, 'a failed read leaves the actions retryable')
 })
 
-// ---- 会话停用后重新计量 --------------------------------------------------
+// ---- 离开跨会话视图后重新计量 --------------------------------------------
 
 test('leaving the cross-session view drops the measured readings', async () => {
   const client = bootClient({ server: storedHost() })

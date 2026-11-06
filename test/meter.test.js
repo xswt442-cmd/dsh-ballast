@@ -106,7 +106,7 @@ test('rows tolerate missing events (seq beyond the log)', () => {
   assert.equal(out.rows[0].time, null)
 })
 
-// dsh <= 0.1.1-rc.2 完全不发送 heuristicTokens。把缺失字段强制成 0 会让
+// 宿主不发送 heuristicTokens 时，缺失字段必须保持缺失。把它强制成 0 会让
 // 每一行都报告 routePriced 且 priceDelta === tokens，那是一整列捏造的信号。
 test('a host without the shadow price reports nulls, never delta === tokens', () => {
   const out = shapeMeasurement(
@@ -180,7 +180,7 @@ function makeFenceCtx(services, { defer = false } = {}) {
 
 const liveSession = {
   id: 'session-1',
-  header: { cwd: 'E:\\.codes\\demo-project' },
+  header: { cwd: 'C:\\work\\demo-project' },
   events: [
     {
       type: 'user/message', seq: 0, time: 1000, surfaceOp: 'append',
@@ -484,8 +484,8 @@ test('a blank or missing title falls through to the workspace, then the id', () 
 })
 
 test('workspaceBasename handles both separators and refuses to label a root', () => {
-  assert.equal(workspaceBasename('E:\\.codes\\createhelper\\dsh-ballast'), 'dsh-ballast')
-  assert.equal(workspaceBasename('E:\\.codes\\createhelper\\dsh-ballast\\'), 'dsh-ballast')
+  assert.equal(workspaceBasename('C:\\work\\demo-project'), 'demo-project')
+  assert.equal(workspaceBasename('C:\\work\\demo-project\\'), 'demo-project')
   assert.equal(workspaceBasename('/home/dev/project'), 'project')
   assert.equal(workspaceBasename('/'), '')
   assert.equal(workspaceBasename('C:\\'), '')

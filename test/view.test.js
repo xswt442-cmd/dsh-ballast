@@ -36,9 +36,8 @@ const HELPERS = ['fmt', 'fmtSigned', 'typeLabel', 'rowText', 'textHint',
   'barWidth', 'sharePct', 'shareLabel', 'unpricedNote', 'snapshotAge',
   'releaseLoading', 'factSummary', 'sizeLabel', 'coldPressure']
 
-// 让文案断言在开发机与 CI 上保持一致。Node 24 暴露 navigator.language，
-// 否则求值出的浏览器语言回退会使用运行器语言（GitHub 上是 en-US，维护者
-// 机器上是 zh-CN）。
+// 让文案断言与运行环境无关。Node 24 暴露 navigator.language，所以这里固定
+// 求值出的浏览器语言回退，否则断言结果随运行器的语言变化。
 const view = new Function(`const navigator = { language: 'zh-CN' }
 ${VIEW_SRC}
 return { ${HELPERS.join(', ')} }`)()
@@ -221,8 +220,8 @@ test('the panel calls every helper instead of formatting inline', () => {
     'bar sizing must live in barWidth, not inline')
   assert.ok(!/>0 \? '\+' : ''/.test(PANEL_SRC),
     'sign handling must live in fmtSigned, not inline')
-  // measure_failed 与 top_partial 携带宿主抛出的原因；只给一个 code 对用户
-  // 没有帮助，所以每条 api 路径都必须优先显示消息。
+  // measure 与 cold-measure 的失败应答携带宿主抛出的原因；只给一个 code 对
+  // 用户没有帮助，所以每条 api 路径都必须优先显示消息。
   const withMessage = PANEL_SRC.match(/body\.error \|\| body\.code/g) || []
   assert.equal(withMessage.length, 4,
     'every api path should surface the host error message')

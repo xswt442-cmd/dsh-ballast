@@ -142,10 +142,9 @@ jobs:
         run: npm publish --provenance --access public
 
   # The only job with a repository-write token, and the only one that does not run
-  # code from the pull: it reads one CHANGELOG section and calls `gh`. It depends on
-  # the checks but not on the npm step, so a version published out of band — like
-  # the first one, before npm knew this package name at all — still gets its notes,
-  # and a registry hiccup does not take the release down with it.
+  # code from the pull: it reads one CHANGELOG section and calls `gh`. It needs the
+  # npm job so the release is created after the publish attempt, while the
+  # `always()` guard keeps a failed publish from suppressing the notes.
   release:
     name: GitHub release from changelog
     needs: [checks, npm]

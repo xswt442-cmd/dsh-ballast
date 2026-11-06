@@ -3,7 +3,6 @@ name: compat
 on:
   push:
     branches: [main, dev]
-  # Outside contributions arrive as pull requests; run the same gate before review.
   pull_request:
   schedule:
     - cron: '23 3 * * *'
@@ -66,9 +65,7 @@ jobs:
 
   # The three shared host fragments are verified locally by `npm test`, which runs
   # http:check / loopback:check / guard:check against the pinned dock version. No
-  # comparison against files outside this repository runs here: `dsh-plugin-parity`
-  # (from the dock) is that comparison, and its verdict only means something while
-  # every checkout it reads sits on the same branch, so it stays a manual diagnostic.
+  # comparison against files outside this repository runs here.
   #
   # This job boots the real host with this bundle mounted, on both platforms and
   # both declared host lines, and both cells assert the same payload contract after
@@ -89,31 +86,19 @@ jobs:
         # change nobody here made and with nothing in the diff to point at.
         # When every other matrix cell is green and only `@latest` is failing,
         # the red is the upstream event, and a gate whose failures mean nothing
-        # gets ignored when it means something. The host line is adopted on
-        # purpose instead: raise `engines.dsh`, the peer and the README badge
-        # together, and this matrix pins the new line as its floor.
+        # gets ignored when it means something. A host line is adopted by raising
+        # `engines.dsh`, the peer and the README badge together, and this matrix
+        # then pins the new line as its floor.
         #
-        # The floor is 0.2.0-rc.1 and the newest anchor is 0.2.1-rc.5. Nothing
-        # below 0.2.0-rc.1 is tested, and nothing below it is declared either:
-        # `engines.dsh` and the `@deepseek-ai/dsh` peer both say `>=0.2.0-rc.1`,
-        # so the manifest and this job state one floor rather than a promise
-        # nobody executes.
+        # The floor is 0.2.0-rc.1, the version `engines.dsh` and the
+        # `@deepseek-ai/dsh` peer both declare; 0.2.1-rc.5 is the newest anchor.
+        # The manifest and this job therefore state one floor rather than a
+        # promise nobody executes. Anything older is outside the declared range.
         #
-        # The 0.1.x lines were dropped on purpose. 0.1.7-rc.2 earned its leg by
-        # pinning the settings migration (settingsScope -> configForms), and that
-        # behaviour is still covered by unit tests; what the boot job bought was
-        # proof against a real host, and that is only worth its runner minutes
-        # while the line is supported. 0.1.5 additionally stopped being
-        # bootable — its tree fails to load @deepseek-ai/dsh-sandbox-local, which
-        # the launcher of that era cannot resolve — so that leg was a standing
-        # red that taught nothing.
-        #
-        # 0.2.1-rc.5 is the newest anchor: the plugin-facing APIs this plugin
-        # reads are unchanged since the 0.1.7 line. The desktop release ships in
-        # this line; the plugin's host half registers on `webServer` and its
-        # client half on `window.__ModuleLoader__`, both of which the Electron
-        # shell runs the same way as `dsh web`, so no separate desktop cell is
-        # needed.
+        # The desktop release ships in the 0.2.1 line; the plugin's host half
+        # registers on `webServer` and its client half on
+        # `window.__ModuleLoader__`, both of which the Electron shell runs the
+        # same way as `dsh web`, so no separate desktop cell is needed.
         dsh-spec: ['@0.2.0-rc.1', '@0.2.1-rc.5']
     steps:
       - uses: actions/checkout@v5
@@ -274,7 +259,7 @@ jobs:
             if ((ApiCode GET "${base}?action=sessions" @('-H', 'Origin: https://evil.example')) -ne '403') { throw 'the deployed API must reject a foreign Origin (403)' }
             if ((ApiCode GET "${base}?action=sessions" @('-H', 'Host: rebound.example')) -ne '403') { throw 'the deployed API must reject a rebound Host (403)' }
 
-            # --- measure happy path (M1-5) ---
+            # --- measure happy path ---
             # ctx.sessions only answers for live sessions, and a bare `dsh web`
             # boot has none, so every check above is a failure path. Create one
             # through the harness's own RPC to prove the read side. The two lines
@@ -324,8 +309,8 @@ jobs:
             if (@($m.rows).Count -ne $m.nodeCount) { throw 'rows length must match nodeCount' }
             if (@($m.rows).Count -eq 0) {
               # A provider-free CI boot has no surface traffic, so the row
-              # contract below is unreachable here. M1 shipped a fabricated Δ
-              # column behind exactly this silence: say it out loud instead.
+              # contract below is unreachable here. Report that gap instead of
+              # treating an unasserted contract as a passing one.
               if ($m.shadowPricing -ne 'unknown') { throw "an empty surface must report shadowPricing unknown, got $($m.shadowPricing)" }
               Write-Host '::notice::0 surface nodes - per-row shape asserts skipped here; covered by test/http.test.js against a priced surface'
             } else {
@@ -443,12 +428,10 @@ jobs:
           done
           [ "$listed" = 1 ] || { echo "::error::created session not measurable: $created"; exit 1; }
 
-          # The two cells now assert the same contract. The Windows one used to own
-          # the field checks while this one grepped the body for `"rows"` — and a
-          # body of `{"rows":[]}` satisfies that grep, so on Linux a measurement
-          # missing every field, or carrying a delta that was really the token count
-          # copied, went green. A grep over a JSON body states the spelling of a key,
-          # not the content of it; node reads the payload the way the panel does.
+          # Both cells assert the same contract. node parses the payload the way
+          # the panel does, so a field that is missing, or a delta that is really
+          # the token count copied, fails here: a grep over a JSON body would
+          # state the spelling of a key rather than the content of it.
           sessionsFile="$RUNNER_TEMP/sessions.json"
           curl -sS --noproxy '*' -b "$cookieJar" --max-time 20 -o "$sessionsFile" "$base?action=sessions"
           node -e '
@@ -484,8 +467,8 @@ jobs:
             if (!Array.isArray(m.rows) || m.rows.length !== m.nodeCount) fail("rows length must match nodeCount")
             if (m.rows.length === 0) {
               // A provider-free CI boot has no surface traffic, so the per-row
-              // contract below is unreachable here. M1 shipped a fabricated delta
-              // column behind exactly this silence: say it out loud instead.
+              // contract below is unreachable here. Report that gap instead of
+              // treating an unasserted contract as a passing one.
               if (m.shadowPricing !== "unknown") fail("an empty surface must report shadowPricing unknown, got " + m.shadowPricing)
               console.log("::notice::0 surface nodes - per-row shape asserts skipped here; covered by test/http.test.js against a priced surface")
             }

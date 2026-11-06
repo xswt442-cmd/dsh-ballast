@@ -17,7 +17,7 @@ DSH Web 上下文窗口归因插件。它按消息条目显示当前 surface 的
 
 - 按 token 占用列出用户消息、助手消息和工具结果。正文折叠空白后截断，工具结果显示工具名，推理块和图像只计数不内联原文。
 - 当前会话的每一行带一个定位按钮：点击后聊天窗口滚动到那一条并高亮。按钮只在聊天窗口显示的就是被测会话时出现。
-- 定位靠聊天窗口 DOM 上的内部属性完成，不是公开接口。宿主换掉这些属性时按钮不出现或点击后什么也不做，条目照常列出。
+- 定位靠聊天窗口 DOM 上的内部属性完成，不是公开接口。宿主换掉这些属性时，点击可能只落在同一个 turn 内的第一条，也可能没有反应；条目照常列出。
 - 显示当前路由价格，host 同时提供 heuristic 影子价时标出价差。价差表示图像可能经过视觉 token 重定价，不表示异常或内容重要性。
 - 显示按消息类型聚合的 token 占比，以及当前 host 上各 live session 中最重的条目。
 - 显示 provider usage、下一次请求的窗口压力，以及 system/tools/messages 的估算构成。估算构成与 provider usage 锚点口径不同，面板不把两者相加。
@@ -27,7 +27,7 @@ DSH Web 上下文窗口归因插件。它按消息条目显示当前 surface 的
 - 侧栏每个会话行的悬浮卡片有一行入口，点击后打开该会话的面板。
 - 该行显示插件已取到的该会话占用：surface 总量与最重条目，只取到会话列表时显示日志条数。
 - 悬停不向宿主请求数据，没有缓存时该行不显示数字。
-- 面板、入口图标和可访问名称跟随 DSH 的全局语言设置。host 未提供该设置时使用浏览器语言。
+- 面板、启动器菜单里本插件那一行以及可访问名称跟随 DSH 的全局语言设置。host 未提供该设置时使用浏览器语言。
 
 ## 安装
 
@@ -77,9 +77,9 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 | DSH | `>=0.2.0-rc.1` |
 | Node.js | `>=20` |
 
-DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.2.0-rc.1` 与 `0.2.1-rc.2`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
+DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.2.0-rc.1` 与 `0.2.1-rc.5`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
 
-低于 `0.2.0-rc.1` 的 0.1.x 版本线不再测试，也不再声明支持。`0.2.0-rc.1` 之前的宿主行为仍由单元测试覆盖，但真实启动验证只覆盖声明支持的两条线。
+受支持范围从 `0.2.0-rc.1` 起。`0.2.0-rc.1` 之前的宿主行为仍由单元测试覆盖，真实启动验证只覆盖声明支持的两条线。
 
 RC1 的 `seq`、`inheritedEventCount`、`events` 均受支持：有 `ctx.sessionQuery` 时按 seq 取事件内容，没有时用旧的 `.events` 数组。projection 缺失时不显示 provider usage 与构成估算，逐条 token 计量仍然提供。`contextPressure` 缺少 `contextWindow` 时留空，不从别处推断。
 

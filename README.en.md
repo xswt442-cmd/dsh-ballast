@@ -17,7 +17,7 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 
 - List user messages, assistant messages, and tool results by token occupancy. Text is whitespace-collapsed and truncated, tool results show their tool name, and reasoning blocks and images are counted but not inlined.
 - Every row of the current session carries a locate button: clicking it scrolls the chat to that entry and highlights it. The button appears only while the chat is showing the session being measured.
-- Locating works through internal DOM attributes of the chat, which are not a public interface. When the host drops those attributes the button is absent, or clicking it does nothing; the entries are still listed.
+- Locating works through internal DOM attributes of the chat, which are not a public interface. When the host renames them, a click may reach only the first entry of the same turn, or nothing at all; the entries are still listed.
 - Show the current route price and, when the host also supplies a heuristic shadow price, mark the difference. A difference indicates that an image may have been repriced as visual tokens; it is not an anomaly or an importance score.
 - Show token share aggregated by message type and the heaviest entry in each live session on the current host.
 - Show provider usage, next-request context pressure, and the estimated system/tools/messages mix. The mix and the provider-usage anchor use different accounting bases, and the panel does not add them together.
@@ -27,7 +27,7 @@ A DSH Web context-window attribution plugin. It shows token occupancy and conten
 - Every Sidebar Session row's hover card carries one ballast line; clicking it opens the panel on that session.
 - That line shows the occupancy the plugin has already read for the session: its surface total and heaviest entry, or the log length when only the session list has been read.
 - Hovering reads nothing from the host, and with nothing cached the line shows no number.
-- The panel, the launcher icon, and accessible labels follow DSH's global language setting. Hosts without that setting use the browser language.
+- The panel, this plugin's row in the launcher menu, and accessible labels follow DSH's global language setting. Hosts without that setting use the browser language.
 
 ## Install
 
@@ -77,9 +77,9 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 | DSH | `>=0.2.0-rc.1` |
 | Node.js | `>=20` |
 
-DSH Desktop is an Electron shell around the same web application; it shares the `webServer`, the client seats, and the launcher, and its data directory is the same `DSH_HOME`. This plugin behaves on Desktop as it does on `dsh web`. The compatibility matrix pins `0.2.0-rc.1` and `0.2.1-rc.2`; each version boots a real host once on Windows and once on Linux.
+DSH Desktop is an Electron shell around the same web application; it shares the `webServer`, the client seats, and the launcher, and its data directory is the same `DSH_HOME`. This plugin behaves on Desktop as it does on `dsh web`. The compatibility matrix pins `0.2.0-rc.1` and `0.2.1-rc.5`; each version boots a real host once on Windows and once on Linux.
 
-The 0.1.x lines below `0.2.0-rc.1` are no longer tested and are no longer claimed as supported. Host behaviour older than that is still covered by the unit tests, but a real boot is only verified against the two declared lines.
+Supported versions start at `0.2.0-rc.1`. Host behaviour older than that is still covered by the unit tests, and a real boot only verifies the two declared lines.
 
 RC1's `seq`, `inheritedEventCount`, and `events` are all supported: with `ctx.sessionQuery` present, event content is read by seq, and without it the older `.events` array is used. A missing projection hides the provider-usage and estimated-mix block; per-message token metering is still provided. A `contextPressure` without a `contextWindow` stays empty rather than being inferred from elsewhere.
 

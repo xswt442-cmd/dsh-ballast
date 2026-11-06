@@ -31,7 +31,7 @@ function fakeSession() {
   return {
     id: 'sess-http-1',
     events: EVENTS,
-    header: { cwd: 'E:/.codes/createhelper/dsh-ballast' }
+    header: { cwd: 'C:/work/demo-project' }
   }
 }
 
@@ -43,8 +43,8 @@ function brokenSession() {
 
 /**
  * 在真实 loopback 服务器上挂载宿主端。
- * @param nodes - ctx.tokenMeter.measure 为活跃会话报告的内容。传入
- *   pre-0.1.2-alpha.2 形状的节点（没有 heuristicTokens）来验证降级宿主。
+ * @param nodes - ctx.tokenMeter.measure 为活跃会话报告的内容。传入不带
+ *   heuristicTokens 的节点来验证不提供影子价的宿主。
  */
 async function mount(nodes, { connection, extra, surface = SURFACE } = {}) {
   const session = fakeSession()
@@ -283,7 +283,7 @@ test('the guard rejects cross-site, foreign origin and rebound host, admits loop
   assert.match(open.headers['content-type'], /^application\/json; charset=utf-8$/)
   assert.equal(open.body.availability, 'available')
   assert.equal(open.body.sessions[0].sessionId, 'sess-http-1')
-  assert.equal(open.body.sessions[0].title, 'dsh-ballast')
+  assert.equal(open.body.sessions[0].title, 'demo-project')
   assert.equal(open.body.sessions[0].titleSource, 'cwd')
 })
 
@@ -350,7 +350,7 @@ test('a priced surface yields heaviest-first rows with a real delta per row', as
   const res = await send(host.url('?action=measure&sessionId=sess-http-1'))
   assert.equal(res.status, 200)
   assert.equal(res.body.ok, true)
-  assert.equal(res.body.title, 'dsh-ballast')
+  assert.equal(res.body.title, 'demo-project')
   const m = res.body.measurement
   assert.equal(m.shadowPricing, 'available')
   assert.equal(m.routePricedCount, 2)
@@ -432,7 +432,7 @@ test('action=top ranks live sessions by their heaviest node', async (t) => {
   assert.equal(res.body.sessions.length, 1)
   const entry = res.body.sessions[0]
   assert.equal(entry.sessionId, 'sess-http-1')
-  assert.equal(entry.title, 'dsh-ballast')
+  assert.equal(entry.title, 'demo-project')
   assert.deepEqual(entry.rows.map((row) => row.tokens), [400, 40, 15])
   assert.equal(typeof entry.rows[0].preview.text, 'string')
 })

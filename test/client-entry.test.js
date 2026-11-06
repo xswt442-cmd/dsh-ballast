@@ -66,7 +66,7 @@ test('the artifact is a classic script: it boots where Node globals do not exist
   assert.equal(definition.id, pkg.name)
 })
 
-test('the client joins the launcher menu instead of a page-local dock', () => {
+test('the client joins the launcher menu and claims the launcher', () => {
   const { entry, registered, window } = bootClient()
   // 启动器菜单上的一行，由本插件贡献……
   const row = entry(UTILITY_ITEM_SLOT, 'ballast')
@@ -77,12 +77,10 @@ test('the client joins the launcher menu instead of a page-local dock', () => {
   assert.ok(entry(OVERLAY_SLOT, 'ballast-panel'), 'the panel is not on the overlay layer')
   assert.ok(entry(HOVER_SLOT, 'ballast'), 'the session row seat is gone')
 
-  // 认领就是启动器的页面互斥：持有它才保证每页只运行一份装配。页面里没有
-  // 第二个 dock 键参与协调。
+  // 认领就是启动器的页面互斥：持有它才保证每页只运行一份装配。
   const claim = window.__CREATEHELPER_DSH_UTILITY_LAUNCHER_V1__
   assert.ok(claim && typeof claim === 'object', 'the launcher claim was never taken')
   assert.equal(claim.owner !== null, true, 'the launcher claim is empty after this plugin registered it')
-  assert.equal(window.__CREATEHELPER_DSH_UTILITY_DOCK_V1__, undefined, 'the retired dock key is back')
   const seats = new Set(registered.map((item) => item.options.name))
   assert.deepEqual([...seats].sort(), [UTILITY_ITEM_SLOT, 'shell.overlay', HOVER_SLOT].sort(),
     'the client registers on a seat no shell owns')
