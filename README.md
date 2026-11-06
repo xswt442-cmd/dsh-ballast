@@ -77,7 +77,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 | DSH | `>=0.2.0-rc.1` |
 | Node.js | `>=20` |
 
-DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.2.0-rc.1` 与 `0.2.1-rc.5`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
+DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.2.0-rc.1` 与 `0.2.2-rc.1`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
 
 受支持范围从 `0.2.0-rc.1` 起。`0.2.0-rc.1` 之前的宿主行为仍由单元测试覆盖，真实启动验证只覆盖声明支持的两条线。
 

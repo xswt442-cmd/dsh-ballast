@@ -77,7 +77,7 @@ The panel reads from the same-origin, read-only `/dsh-ballast/api` route: `sessi
 | DSH | `>=0.2.0-rc.1` |
 | Node.js | `>=20` |
 
-DSH Desktop is an Electron shell around the same web application; it shares the `webServer`, the client seats, and the launcher, and its data directory is the same `DSH_HOME`. This plugin behaves on Desktop as it does on `dsh web`. The compatibility matrix pins `0.2.0-rc.1` and `0.2.1-rc.5`; each version boots a real host once on Windows and once on Linux.
+DSH Desktop is an Electron shell around the same web application; it shares the `webServer`, the client seats, and the launcher, and its data directory is the same `DSH_HOME`. This plugin behaves on Desktop as it does on `dsh web`. The compatibility matrix pins `0.2.0-rc.1` and `0.2.2-rc.1`; each version boots a real host once on Windows and once on Linux.
 
 Supported versions start at `0.2.0-rc.1`. Host behaviour older than that is still covered by the unit tests, and a real boot only verifies the two declared lines.
 

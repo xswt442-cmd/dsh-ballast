@@ -91,15 +91,15 @@ jobs:
         # then pins the new line as its floor.
         #
         # The floor is 0.2.0-rc.1, the version `engines.dsh` and the
-        # `@deepseek-ai/dsh` peer both declare; 0.2.1-rc.5 is the newest anchor.
+        # `@deepseek-ai/dsh` peer both declare; 0.2.2-rc.1 is the newest anchor.
         # The manifest and this job therefore state one floor rather than a
         # promise nobody executes. Anything older is outside the declared range.
         #
-        # The desktop release ships in the 0.2.1 line; the plugin's host half
+        # The desktop release ships from the same line; the plugin's host half
         # registers on `webServer` and its client half on
         # `window.__ModuleLoader__`, both of which the Electron shell runs the
         # same way as `dsh web`, so no separate desktop cell is needed.
-        dsh-spec: ['@0.2.0-rc.1', '@0.2.1-rc.5']
+        dsh-spec: ['@0.2.0-rc.1', '@0.2.2-rc.1']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
