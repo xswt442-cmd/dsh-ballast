@@ -85,7 +85,7 @@ RC1 的 `seq`、`inheritedEventCount`、`events` 均受支持：有 `ctx.session
 
 ## 开发
 
-验证命令见仓库根目录的 `AGENTS.md`，发布步骤见 `docs/development/RELEASE.md`。
+验证命令见仓库根目录的 `AGENTS.md`，发布步骤见 `docs/RELEASING.md`。
 
 ## License
 

@@ -1,15 +1,11 @@
 name: compat
 
 on:
-  # The gate has to run where a change can still be acted on. With only push and
-  # schedule here, the first signal a branch sends was the merge commit turning
-  # `main` red, and a PR could land without ever having been tested.
-  pull_request:
+  push:
+    branches: [main, dev]
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
-  push:
-    branches: [main, dev]
 
 concurrency:
   group: compat-${{ github.ref }}

@@ -85,7 +85,7 @@ RC1's `seq`, `inheritedEventCount`, and `events` are all supported: with `ctx.se
 
 ## Development
 
-Verification commands are in `AGENTS.md` at the repository root; release steps are in `docs/development/RELEASE.md`.
+Verification commands are in `AGENTS.md` at the repository root; release steps are in `docs/RELEASING.md`.
 
 ## License
 
