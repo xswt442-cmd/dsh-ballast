@@ -1,0 +1,7 @@
+docs: split two long bullets and settle on Web
+
+The cross-session Top view carried five sentences in one bullet; the
+archived-session part is now its own item. The Electron shell line said
+"web 应用" while the rest of the file writes Web.
+
+0 error, 0 warning.

@@ -49,8 +49,11 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 面板提供两个视图：
 
 - **当前会话**：按条目查看当前 surface 的占用、类型、时间和摘要。已被 compaction `replace` 折叠的旧 `append` 条目不显示。
-- **跨会话 Top**：按需为当前 host 的每个 live session 计量一次，并按最重条目排序。读取成本随 live session 数量增加。单个会话计量失败不影响其他会话的结果。该视图同时列出已存储但没有 live agent 的会话，按占盘大小排序，并给出各自投影缓存里的上下文压力。日志条数、字节数与 revision 来自持久化快照，token 数字来自投影缓存，因此可能停留在该会话最后一次写入时的值；标题来自一次批量日志读取。
-- 已存储的每一行有一个计量按钮：点击后读取该会话的完整事件日志，按活跃会话的同一口径计量，并显示 surface 总量与条目数。列出会话本身不读日志，只有点击才读盘，而这一次读取的成本比列出一行高一个量级，所以由用户逐行触发、一次只测一个会话。损坏的日志在它那一行显示为失败，其余行不受影响。
+- **跨会话 Top**：按需为当前 host 的每个 live session 计量一次，并按最重条目排序。读取成本随 live session 数量增加，单个会话计量失败不影响其他会话的结果。
+- **没有 live agent 的存档会话**：同一视图按占盘大小列出这些会话，并给出各自投影缓存里的上下文压力。日志条数、字节数与 revision 来自持久化快照，token 数字来自投影缓存，可能停留在该会话最后一次写入时的值，标题则来自一次批量日志读取。
+- 已存储的每一行有一个计量按钮：点击后读取该会话的完整事件日志，按活跃会话的同一口径计量，并显示 surface 总量与条目数。
+- 列出会话本身不读日志，只有点击才读盘，成本比列出一行高一个量级。所以由用户逐行触发，一次只测一个会话。
+- 日志损坏时只在它那一行显示为失败，其余行不受影响。
 
 面板通过同源只读接口 `/dsh-ballast/api` 获取数据：`sessions` 列出会话，`measure&sessionId=` 计量一个会话，`top&limit=` 返回跨会话结果，`cold` 返回已存储但没有 live agent 的会话，`cold-measure&sessionIds=` 按需计量这些已存储会话（一次最多 20 个）。接口只接受 `GET` 和 `HEAD`，其他方法返回 `405`。未提供可解析 token 价格的条目显示为未计价，不参与占用条或 token 占比。
 
@@ -77,7 +80,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-ballast
 | DSH | `>=0.2.0-rc.1` |
 | Node.js | `>=20` |
 
-DSH Desktop 是同一 web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.2.0-rc.1` 与 `0.2.2-rc.1`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
+DSH Desktop 是同一 Web 应用的 Electron 外壳，使用同一 `webServer`、客户端席位与 launcher，数据目录同为 `DSH_HOME`；本插件在 Desktop 上与 `dsh web` 行为一致。兼容矩阵固定验证 `0.2.0-rc.1` 与 `0.2.2-rc.1`：每个版本在 Windows 与 Linux 各启动一次真实宿主。
 
 受支持范围从 `0.2.0-rc.1` 起。`0.2.0-rc.1` 之前的宿主行为仍由单元测试覆盖，真实启动验证只覆盖声明支持的两条线。
 
